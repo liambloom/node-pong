@@ -99,11 +99,7 @@ module.exports.CMD = class CMD extends EventEmitter {
     readline.emitKeypressEvents(process.stdin);
     this.in.setRawMode(true);
     this.in.on("keypress", (str, key) => {
-      if (key.ctrl && !key.meta && !key.shift && key.name === "c") {
-        this.out.write("\x1b[0m");
-        this.out.cursorTo(0, this.out.rows - 2);
-        process.exit();
-      }
+      if (key.ctrl && !key.meta && !key.shift && key.name === "c") process.exit();
       switch (key.code) {
         case "[A":
           this.emit("up", key);
@@ -119,6 +115,13 @@ module.exports.CMD = class CMD extends EventEmitter {
           break;
       }
     });
+    const out = this.out;
+    process.on("exit", () => {
+      out.write("\x1b[0m");
+      out.cursorTo(0, this.out.rows - 1);
+      out.clearLine();
+      out.cursorTo(0, this.out.rows - 2);
+    })
   }
   drawLine (x1, y1, x2, y2, thickness = 1, dashed = false, dashThickness = 0.5) {
     this.#methodsCalled.push(this.drawLine.bind(this, x1, y1, x2, y2, thickness, dashed, dashThickness));
