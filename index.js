@@ -2,6 +2,7 @@
 
 const flags = require("./flags")();
 const cmdDraw = require("./cmdDraw");
+console = require("./colorConsole");
 
 const cmd = new cmdDraw.CMD({
   width: flags.w || flags.width || 110,
@@ -11,10 +12,22 @@ const cmd = new cmdDraw.CMD({
 
 const fg = flags.c || flags.color || flags.fg || flags.foreground;
 const bg = flags.bg || flags.background || flags.backgroundColor;
-if (fg) cmd.color.fg = fg;
-if (bg) cmd.color.bg = bg;
+if (cmd.out.getColorDepth() === 1 && (fg || bg)) console.warn("Colors are not supported in your terminal");
+else {
+  cmd.color.fg = fg || "white";
+  cmd.color.bg = bg || "black";
+}
 
 cmd.drawLine(cmd.width / 2, 0, cmd.width / 2, cmd.height, 2, true, 0.5);
+
+cmd.drawBox(6, cmd.height / 2 - 4, 2, 8);
+cmd.drawBox(cmd.width - 8, cmd.height / 2 - 4, 2, 8);
+
+cmd.on("up", () => {
+  //console.log("up");
+});
+
+
 /*cmd.drawLine(0,   0, cmd.width, 0, 1, true, 0.5);
 cmd.drawLine(0,   1, cmd.width, 1, 1, true, 1  );
 cmd.drawLine(0,   2, cmd.width, 2, 1, true, 1.5);
