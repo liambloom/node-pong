@@ -1,12 +1,28 @@
+// Get localhost IP address: os.networkInterfaces()["Wi-Fi 2"].find(e => e.family === "IPv4").address
+
 const flags = require("./flags")();
 const cmdDraw = require("./cmdDraw");
 
 const cmd = new cmdDraw.CMD({
-  width: flags.w || flags.width,
-  height: flags.h || flags.height,
-  border: "round"
+  width: flags.w || flags.width || 110,
+  height: flags.h || flags.height || 30,
+  border: "solid"
 });
-cmd.drawLine(1, 0, cmd.width, 0, 1, true, 1.5); // Thickness argument doesn't do anything yet
+
+const fg = flags.c || flags.color || flags.fg || flags.foreground;
+const bg = flags.bg || flags.background || flags.backgroundColor;
+if (fg) cmd.color.fg = fg;
+if (bg) cmd.color.bg = bg;
+
+cmd.drawLine(cmd.width / 2, 0, cmd.width / 2, cmd.height, 2, true, 0.5);
+/*cmd.drawLine(0,   0, cmd.width, 0, 1, true, 0.5);
+cmd.drawLine(0,   1, cmd.width, 1, 1, true, 1  );
+cmd.drawLine(0,   2, cmd.width, 2, 1, true, 1.5);
+cmd.drawLine(0,   3, cmd.width, 3, 1, true, 2  );
+cmd.drawLine(0.5, 4, cmd.width, 4, 1, true, 0.5);
+cmd.drawLine(0.5, 5, cmd.width, 5, 1, true, 1  );
+cmd.drawLine(0.5, 6, cmd.width, 6, 1, true, 1.5);
+cmd.drawLine(0.5, 7, cmd.width, 7, 1, true, 2  );*/
 
 /*const leftPaddle = new cmdDraw.Sprite({
 

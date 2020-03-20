@@ -2,7 +2,7 @@ module.exports = () => {
   const args = {};
   let currentArg;
   for (let arg of process.argv.slice(2)) {
-    if (arg.match(/-[a-z]|--[a-z]+/)) currentArg = arg.replace(/^--?/, "");
+    if (arg.match(/-[a-z]|--[a-z]{2,}/)) currentArg = arg.replace(/^--?/, "");
     else {
       if (!currentArg) throw new Error("Unexepcted Token: " + arg);
       else if (arg.match(/^-?\d*\.?\d+$/)) args[currentArg] = parseFloat(arg);
