@@ -309,16 +309,19 @@ module.exports.CMD = class CMD extends EventEmitter {
   }
 };
 
-module.exports.Sprite = class Sprite {
+module.exports.Sprite = class Sprite extends EventEmitter {
   constructor (callback, config = {}) {
-    if (typeof callback !== "function") throw new Error("Argument 1 of the Sprite constructor must be a function, received type " + typeof callback);
-    Object.defineProperties(this, {
-      callback: {
-        value: callback
-      },
-      config: {
-        value: config
+    Object.defineProperty(this, "callback", {
+      value: verify(callback)
+    })
+    config.width = verify.config(config, "width", -1, false, 0);
+    config.height = verify.config(config, "height", -1, false, 0);
+    for (let key of Object.keys(config)) {
+      if (config[key] !== undefined) {
+        Object.defineProperty(this, key, {
+          value: config[key]
+        });
       }
-    });
+    }
   }
 };
