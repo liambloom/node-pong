@@ -16,6 +16,10 @@
     "terminal",
     "cli"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/liambloom/node-pong"
+  },
   "author": "Liam Bloom (https://liambloom.herokuapp.com)",
   "license": "ISC",
   "dependencies": {}
