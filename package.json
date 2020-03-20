@@ -1,13 +1,22 @@
 {
   "name": "node-pong",
-  "version": "1.0.0",
-  "description": "",
+  "version": "0.0.1",
+  "description": "This is pong in the command line",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "engines": {
+    "node": ">=12.0.0"
+  },
+  "keywords": [
+    "pong",
+    "game",
+    "command line",
+    "terminal",
+    "cli"
+  ],
+  "author": "Liam Bloom (https://liambloom.herokuapp.com)",
   "license": "ISC",
   "dependencies": {}
 }
