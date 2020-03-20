@@ -27,32 +27,52 @@ class Color extends EventEmitter {
     this.#out = out;
   }
   reset () {
-    this.#fg = undefined;
-    this.#bg = undefined;
+    this.#foreground = undefined;
+    this.#background = undefined;
     this.#out.write("\x1b[0m");
-    this.emit("change");
+    this.emit("change", "reset");
   }
-  get fg () {
-    return this.#fg;
+  get foreground () {
+    return this.#foreground;
   }
-  set fg (color) {
-    if (!Color.#COLORS.includes(color)) throw new Error(color + " is not a valid color");
-    this.#fg = color;
-    this.#out.write(`\x1b[3${Color.#COLORS.indexOf(color)}m`);
-    this.emit("change");
+  set foreground (color) {
+    if (color == null || color === "none") {
+      this.#highlight = undefined;
+      this.#refresh();
+    }
+    else if (!Color.#COLORS.includes(color)) throw new Error(color + " is not a valid color");
+    else {
+      this.#foreground = color;
+      this.#out.write(`\x1b[3${Color.#COLORS.indexOf(color)}m`);
+      this.emit("change", "foreground", color);
+    }
   }
-  get bg () {
-    return this.#bg;
+  get background () {
+    return this.#background;
   }
-  set bg (color) {
-    if (!color.includes(color)) throw new Error(color + " is not a valid color");
-    this.#bg = color;
-    this.#out.write(`\x1b[4${Color.#COLORS.indexOf(color)}m`);
-    this.emit("change");
+  set background (color) {
+    if (color == null || color === "none") {
+      this.#background = undefined;
+      this.#refresh();
+    }
+    else if (!color.includes(color)) throw new Error(color + " is not a valid color");
+    else {
+      this.#refresh;
+      this.#background = color;
+      this.#out.write(`\x1b[4${Color.#COLORS.indexOf(color)}m`);
+      this.#out.cursorTo(0, 0);
+      this.#out.clearScreenDown();
+      this.emit("change", "background", color);
+    }
   }
+  /*#refresh = function () {
+    this.#out.write("\x1b[0m");
+    this.foreground = this.#foreground;
+    this.background = this.#background;
+  }*/
   #out;
-  #fg;
-  #bg;
+  #foreground;
+  #background;
   static #COLORS = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
 }
 
@@ -88,14 +108,18 @@ module.exports.CMD = class CMD extends EventEmitter {
     Object.defineProperty(this, "margin", {
       value: new Margin(this.out, this.width, this.height)
     });
+    this.out.on("resize", () => this.#onresize());
+    this.color.on("change", (layer, color) => {
+      if (layer === "background") this.refresh();
+      else this.#methodsCalled.push(Object.getOwnPropertyDescriptor(Color.prototype, layer).set.bind(this.color, color));
+    });
+    this.#clear();
+    this.drawBorder();
     if (config.color) {
-      if (config.color.fg) this.color.fg = config.color.fg;
-      if (config.color.bg) this.color.bg = config.color.bg;
+      if (config.color.background) this.color.background = config.color.background;
+      if (config.color.foreground) this.color.foreground = config.color.foreground;
+      if (config.color.highlight) this.color.highlight = config.color.highlight;
     }
-    this.#onresize();
-    const onresize = this.#onresize.bind(this);
-    this.out.on("resize", () => onresize());
-    this.color.on("change", () => onresize());
     readline.emitKeypressEvents(process.stdin);
     this.in.setRawMode(true);
     this.in.on("keypress", (str, key) => {
@@ -120,7 +144,10 @@ module.exports.CMD = class CMD extends EventEmitter {
       out.write("\x1b[0m");
       out.cursorTo(0, this.out.rows - 1);
       out.clearLine();
-      out.cursorTo(0, this.out.rows - 2);
+      for (let method of this.#methodsCalled) {
+        console.log(method.name);
+      }
+      //out.cursorTo(0, this.out.rows - 2);
     })
   }
   drawLine (x1, y1, x2, y2, thickness = 1, dashed = false, dashThickness = 0.5) {
@@ -218,23 +245,16 @@ module.exports.CMD = class CMD extends EventEmitter {
     });
     this.#sprites.add(sprite);
   }
-  #onresize = function () {
-    this.out.cursorTo(0, 0);
-    this.out.clearScreenDown();
-    if (this.tooBig) this.out.write("Playing field is larger than terminal. Please make terminal larger to continue.");
-    else {
-      this.#drawBorder();
-      const methods = this.#methodsCalled.concat();
-      this.#methodsCalled = [];
-      for (let method of methods) {
-        method();
-      }
+  refresh () {
+    this.#clear();
+    const methods = this.#methodsCalled.concat();
+    this.#methodsCalled = [];
+    for (let method of methods) {
+      method();
     }
   }
-  #drawLineAcross = function () {
-    for (let column = 0; column < this.width - this.borderChars.horizontal.length + 1; column += this.borderChars.horizontal.length) process.stdout.write(this.borderChars.horizontal);
-  }
-  #drawBorder = function () {
+  drawBorder = function () {
+    this.#methodsCalled.push(this.drawBorder.bind(this));
     if (this.hasBorder) {
       this.out.cursorTo(this.margin.lr - this.borderChars.topLeft.length, this.margin.tb - 1);
       this.out.write(this.borderChars.topLeft);
@@ -251,6 +271,19 @@ module.exports.CMD = class CMD extends EventEmitter {
       this.#drawLineAcross();
       this.out.write(this.borderChars.bottomRight);
     }
+  }
+  #clear = function () {
+    this.out.cursorTo(0, 0);
+    this.out.clearScreenDown();
+    this.out.write("\x1b[0m")
+  }
+  #onresize = function () {
+    this.#clear();
+    if (this.tooBig) this.out.write("\x1b[7mPlaying field is larger than terminal. Please make terminal larger to continue.\x1b[0m");
+    else this.refresh();
+  }
+  #drawLineAcross = function () {
+    for (let column = 0; column < this.width - this.borderChars.horizontal.length + 1; column += this.borderChars.horizontal.length) process.stdout.write(this.borderChars.horizontal);
   }
   get tooBig () {
     return this.margin.lr < this.largestBorder || this.margin.tb < 1;
