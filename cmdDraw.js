@@ -198,7 +198,7 @@ module.exports.CMD = class CMD extends EventEmitter {
     y = verify(y, Number, "y");
     width = verify(width, Number, "width");
     height = verify(height, Number, "height");
-    if (x < 0 || x > this.width || y < 0 || y > this.height || x + width < this.width || y + height < this.height) throw new Error("Box cannot be outside cmd");
+    if (x < 0 || x > this.width || y < 0 || y > this.height || x + width > this.width || y + height > this.height) throw new Error("Box cannot be outside cmd");
     x = roundToNearest(x, 0.5);
     y = roundToNearest(y, 0.5);
     width = roundToNearest(width, 0.5);
