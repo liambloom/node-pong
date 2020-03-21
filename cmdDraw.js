@@ -73,7 +73,7 @@ class Color extends EventEmitter {
   static #COLORS = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
 }
 
-module.exports.CMD = class CMD extends EventEmitter {
+class Terminal extends EventEmitter {
   constructor (config = {}) {
     super();
     Object.defineProperties(this, {
@@ -81,7 +81,7 @@ module.exports.CMD = class CMD extends EventEmitter {
         value: verify.config(config, "out", process.stdout)
       },
       borderChars: {
-        value: CMD.#BORDERS[verify.config(config, "border", "light")] || (() => { throw new Error(`config.${config.border} is not a valid border type`); })()
+        value: Terminal.#BORDERS[verify.config(config, "border", "light")] || (() => { throw new Error(`config.${config.border} is not a valid border type`); })()
       },
       // The following 2 could go in any set of property definitions
       in: {
@@ -147,6 +147,10 @@ module.exports.CMD = class CMD extends EventEmitter {
     })
   }
   drawLine (x1, y1, x2, y2, color, thickness = 1, dashed = false, dashThickness = 0.5, spaceColor) {
+    if (this.clearMode) {
+      color = this.color.background;
+      spaceColor = this.color.background;
+    }
     this.#methodsCalled.push(this.drawLine.bind(this, x1, y1, x2, y2, color, thickness, dashed, dashThickness, spaceColor));
     if (this.tooBig) return;
     x1 = verify(x1, Number, "x1");
@@ -170,9 +174,9 @@ module.exports.CMD = class CMD extends EventEmitter {
         if (dashed) {
           let dash = "";
           const startWithHalf = roundToNearest(xMin, 0.5) % 1;
-          if (startWithHalf) dash += CMD.#RIGHT;
-          for (let column = 0; column < Math.floor(startWithHalf ? dashThickness - 0.5 : dashThickness); column++) dash += CMD.#FULL;
-          if (roundToNearest(xMin + dashThickness, 0.5) % 1) dash += CMD.#LEFT;
+          if (startWithHalf) dash += Terminal.#RIGHT;
+          for (let column = 0; column < Math.floor(startWithHalf ? dashThickness - 0.5 : dashThickness); column++) dash += Terminal.#FULL;
+          if (roundToNearest(xMin + dashThickness, 0.5) % 1) dash += Terminal.#LEFT;
           for (let column = 0; column < Math.floor(Math.abs(x2 - x1) / dashThickness) * dashThickness; column += dashThickness * 2) {
             this.out.cursorTo(this.margin.lr + Math.floor(xMin) + column, this.margin.tb + Math.floor(y1) + row);
             this.out.write(dash);
@@ -180,13 +184,13 @@ module.exports.CMD = class CMD extends EventEmitter {
         }
         /*else if (roundToNearest(y1, 0.5) % 1) {
           this.out.cursorTo(this.margin.lr + Math.round(xMin), this.margin.tb + Math.floor(y1) + row);
-          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(CMD.#BOTTOM);
+          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.#BOTTOM);
           this.out.cursorTo(this.margin.lr + Math.round(xMin), this.margin.tb + Math.ceil(y1) + row);
-          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(CMD.#TOP);
+          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.#TOP);
         }*/
         else {
           this.out.cursorTo(this.margin.lr + Math.round(xMin), this.margin.tb + Math.round(y1) + row);
-          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(CMD.#FULL);
+          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.#FULL);
         }
       }
       this.out.write(Color.DEFAULT)
@@ -199,9 +203,9 @@ module.exports.CMD = class CMD extends EventEmitter {
         if (dashed) {
           let dash = [];
           const startWithHalf = roundToNearest(yMin, 0.5) % 1;
-          if (startWithHalf) dash.push(CMD.#BOTTOM);
-          for (let row = 0; row < Math.floor(startWithHalf ? dashThickness - 0.5 : dashThickness); row++) dash.push(CMD.#FULL);
-          if (roundToNearest(yMin + dashThickness, 0.5) % 1) dash.push(CMD.#TOP);
+          if (startWithHalf) dash.push(Terminal.#BOTTOM);
+          for (let row = 0; row < Math.floor(startWithHalf ? dashThickness - 0.5 : dashThickness); row++) dash.push(Terminal.#FULL);
+          if (roundToNearest(yMin + dashThickness, 0.5) % 1) dash.push(Terminal.#TOP);
           for (let row = 0; row < Math.floor(Math.abs(y2 - y1) / dashThickness) * dashThickness; row += dashThickness * 2) {
             for (let i = 0; i < dash.length; i++) {
               this.out.cursorTo(this.margin.lr + Math.floor(x1) + column, this.margin.tb + Math.floor(yMin) + row + i);
@@ -212,7 +216,7 @@ module.exports.CMD = class CMD extends EventEmitter {
         else {
           for (let row = 0; row < Math.abs(y2 - y1); row++) {
             this.out.cursorTo(this.margin.lr + Math.round(x1) + column, this.margin.tb + Math.round(yMin) + row);
-            this.out.write(CMD.#FULL);
+            this.out.write(Terminal.#FULL);
           }
         }
       }
@@ -221,6 +225,7 @@ module.exports.CMD = class CMD extends EventEmitter {
     if (color || spaceColor) this.color.refresh();
   }
   drawBox (x, y, width, height, color) { // Cannot handle decimals
+    if (this.clearMode) color = this.color.background;
     this.#methodsCalled.push(this.drawBox.bind(this, x, y, width, height, color));
     if (this.tooBig) return;
     x = verify(x, Number, "x");
@@ -228,16 +233,30 @@ module.exports.CMD = class CMD extends EventEmitter {
     width = verify(width, Number, "width", true, 0);
     height = verify(height, Number, "height", true, 0);
     if (color) this.out.write(Color.getForegroundColor(color));
-    if (x < 0 || y < 0 || x + width > this.width || y + height > this.height) throw new Error("Box cannot be outside cmd");
+    if (x < 0 || y < 0 || x + width > this.width || y + height > this.height) throw new Error(`Box cannot be outside terminal, was at (${x}, ${y})`);
     x = roundToNearest(x, 0.5);
     y = roundToNearest(y, 0.5);
     width = roundToNearest(width, 0.5);
     height = roundToNearest(height, 0.5);
     if ((x % 1 || width % 1) && (y % 1 || height % 1)) throw new Error("Can only use 0.5 block precision on one axis");
-    for (let row = 0; row < height; row++) {
-      this.out.cursorTo(this.margin.lr + x, this.margin.tb + row + y);
+    if (y % 1 !== 0) {
+      this.out.cursorTo(this.margin.lr + x, Math.floor(this.margin.tb + y))
       for (let column = 0; column < width; column++) {
-        this.out.write(CMD.#FULL);
+        this.out.write(Terminal.#BOTTOM);
+      }
+    }
+    for (let row = 0; row < Math.floor(height - y % 1); row++) {
+      this.out.cursorTo(Math.floor(this.margin.lr + x), Math.floor(this.margin.tb + row + Math.ceil(y)));
+      for (let column = 0; column < width; column++) {
+        if (x % 1 !== 0 && column === 0) this.out.write(Terminal.#RIGHT);
+        else if ((x + width) % 1 !== 0 && x + 1 >= width) this.out.write(Terminal.#LEFT);
+        else this.out.write(Terminal.#FULL);
+      }
+    }
+    if ((y + height) % 1 !== 0) {
+      this.out.cursorTo(this.margin.lr + x, Math.floor(this.margin.tb + y + height))
+      for (let column = 0; column < width; column++) {
+        this.out.write(Terminal.#TOP);
       }
     }
     if (color) this.color.refresh();
@@ -249,14 +268,14 @@ module.exports.CMD = class CMD extends EventEmitter {
     x = verify(x, 0, "x", false);
     y = verify(y, 0, "y", false);
     if (color) this.out.write(Color.getForegroundColor(color));
-    if (x < 0 || x + text.length > color || y < 0 || y > this.height) throw new Error("Text cannot be outside cmd");
+    if (x < 0 || x + text.length > color || y < 0 || y > this.height) throw new Error("Text cannot be outside terminal");
     this.out.cursorTo(this.margin.lr + Math.round(x), this.margin.tb + Math.round(y));
     this.out.write(text);
     if (color) this.color.refresh();
   }
   addSprite (sprite) {
     sprite = verify(sprite, Sprite, "sprite");
-    Object.defineProperty(sprite, "cmd", {
+    Object.defineProperty(sprite, "terminal", {
       value: this
     });
     this.#sprites.add(sprite);
@@ -317,6 +336,7 @@ module.exports.CMD = class CMD extends EventEmitter {
   get time () {
     return performance.now() - this.#frozen;
   }
+  clearMode = false;
   #frozenStartTime;
   #frozen = 0;
   #methodsCalled = [];
@@ -378,61 +398,143 @@ class Sprite {
       callback: {
         value: verify(callback, Function, "callback")
       },
-      ignoreErrors: {
-        value: verify.config(config, "ignoreErrors", false)
-      },
       preciseAxis: {
         value: verify.config(config, "preciseAxis", "neither")
       }
     });
+    if (config.hasOwnProperty("speed")) {
+      this.speed = config.speed;
+    }
   }
-  draw (x = this.x, y = this.y, a = this.a) {
-    try {
-      this.callback(x, y, a);
-      this.#x = x;
-      this.#y = y;
-      this.#a = a;
+  draw (x = this.x, y = this.y, ...args) {
+    this.#x = x;
+    this.#y = y;
+    this.callback(x, y, ...args);
+  }
+  clear () {
+    if (this.#x !== undefined) {
+      const clearMode = this.terminal.clearMode;
+      this.terminal.clearMode = true;
+      this.draw(this.x, this.y, this.terminal.color.background);
+      this.terminal.clearMode = clearMode;
     }
-    catch (err) {
-      const callStack = new Error().stack.split("\n").slice(1);
-      if (this.ignoreErrors && callStack[0] !== callStack[1]) this.draw();
-      else throw err;
-    }
+    this.#x = undefined;
+    this.#y = undefined;
+  }
+  stop () {
+    cancelAnimationFrame(this.#frameId);
   }
   move (x1, y1, x2, y2, t) {
+    this.stop();
     x1 = verify(x1, Number, "x1");
     y1 = verify(y1, Number, "y1");
     x2 = verify(x2, Number, "x2");
     y2 = verify(y2, Number, "y2");
-    t = verify(t, Number, "t") * 1000;
+    if (this.speed == null) t = verify(t, Number, "t") * 1000
+    else t = verify(t, distance(x1, y1, x2, y2) / this.speed, "t", false) * 1000;
     const xv = (x2 - x1) / t;
     const yv = (y2 - y1) / t;
-    const start = this.cmd.time;
-    const xRounder = this.preciseAxis === "x" ? x => x : Math.round;
-    const yRounder = this.preciseAxis === "y" ? y => y : Math.round;
+    const xRounder = this.preciseAxis === "x" ? x => roundToNearest(x, 0.5) : Math.round;
+    const yRounder = this.preciseAxis === "y" ? y => roundToNearest(y, 0.5) : Math.round;
+    const start = this.terminal.time;
     const frame = () => {
-      if (!this.cmd.tooBig) {
-        this.draw(xRounder(x1 + xv * (this.cmd.time - start)), yRounder(y1 + yv * (this.cmd.time - start))); // The previous frame needs to be cleared
+      const timeElapsed = this.terminal.time - start;
+      if (timeElapsed > t) {
+        this.stop();
+        this.clear();
+        this.draw(x2, y2);
       }
-      requestAnimationFrame(frame);
+      else {
+        const x = xRounder(x1 + xv * timeElapsed);
+        const y = yRounder(y1 + yv * timeElapsed);
+        if (x !== this.x || y !== this.y) {
+          this.clear();
+          this.draw(x, y);
+        }
+        this.#frameId = requestAnimationFrame(frame);
+      }
     }
-    requestAnimationFrame(frame);
+    this.#frameId = requestAnimationFrame(frame);
   }
   moveTo (x, y, t) {
     this.move(this.x, this.y, x, y, t);
   }
-  spin (a1, a2, t) {
-
+  moveRelative (dx, dy, t) {
+    this.moveTo(this.x + dx, this.y + dy, t);
   }
-  spinTo (a, t) {
-    this.spin(this.a, a, t);
-  }
+  /*jump (height, distance, speed) {
+    //console.log("jump");
+    if (!this.#x) throw new Error("Cannot jump if shape is not showing");
+    height = verify(height, Number, "height");
+    distance = verify(distance, Number, "distance");
+    if (this.speed == null) speed = verify(speed, Number, "speed")
+    else speed = verify(speed, this.speed, "speed", false);
+    const x1 = this.x;
+    const x2 = this.x + distance;
+    const y1_2 = this.y;
+    const a = 4 * height / distance ** 2;
+    const h = distance / 2;
+    const k = -height + y1_2;
+    const quadratic = x => a * (x - h) ** 2 + k;
+    const time = distance / speed * 1000;
+    const xRounder = this.preciseAxis === "x" ? x => roundToNearest(x, 0.5) : Math.round;
+    const yRounder = this.preciseAxis === "y" ? y => roundToNearest(y, 0.5) : Math.round;
+    const start = this.terminal.time;
+    const frame = () => {
+      //console.log("frame");
+      const timeElapsed = this.terminal.time - start;
+      if (timeElapsed > time) {
+        cancelAnimationFrame(this.#frameId)
+        this.clear();
+        this.draw(x2, y1_2);
+      }
+      else {
+        //console.log(timeElapsed / speed + x1);
+        const x = xRounder(timeElapsed / speed + x1);
+        const y = yRounder(quadratic(timeElapsed / speed));
+        //console.log(`(${x1}, ${y1_2}) -> (${x}, ${y})`);
+        if (x !== this.x || y !== this.y) {
+          this.clear();
+          this.draw(x, y);
+        }
+        this.#frameId = requestAnimationFrame(frame);
+      }
+    };
+    this.#frameId = requestAnimationFrame(frame);
+  }*/
   get x () { return this.#x; }
   get y () { return this.#y; }
-  get a () { return this.#a; }
+  get speed () {
+    return this.#speed;
+  } 
+  set speed (speed) {
+    this.#speed = verify(speed, Number, "speed");
+  }
   #x;
   #y;
-  #a;
+  #speed;
+  #frameId;
 };
+class Box extends Sprite {
+  constructor (width, height, config) {
+    width = verify(width, Number, "width");
+    height = verify(height, Number, "height");
+    config = verify(config, {}, "config", false);
+    config.preciseAxis = verify.config(config, "preciseAxis", "y")
+    super((x, y) => {
+      this.terminal.drawBox(x, y, width, height, config.color);
+    }, config);
+    Object.defineProperties(this, {
+      width: {
+        value: width
+      },
+      height: {
+        value: height
+      }
+    })
+  }
+}
 
+module.exports.Terminal = Terminal;
 module.exports.Sprite = Sprite;
+module.exports.Box = Box;
