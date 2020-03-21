@@ -1,8 +1,11 @@
 const EventEmitter = require('events');
 const readline = require("readline");
+const { performance } = require("perf_hooks");
 const verify = require("./verifyType");
+require("./animation");
 
 const roundToNearest = (num, nearest) => Math.round(num / nearest) * nearest;
+const distance = (x1, y1, x2, y2) => Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 
 class Margin {
   constructor (out, width, height) {
@@ -27,32 +30,46 @@ class Color extends EventEmitter {
     this.#out = out;
   }
   reset () {
-    this.#fg = undefined;
-    this.#bg = undefined;
-    this.#out.write("\x1b[0m");
+    this.#foreground = undefined;
+    this.#background = undefined;
+    this.#out.write(Color.RESET);
     this.emit("change");
   }
-  get fg () {
-    return this.#fg;
+  refresh () {
+    this.#out.write(Color.RESET);
+    if (this.foreground) this.#out.write(Color.getForegroundColor(this.foreground));
+    if (this.background) this.#out.write(Color.getBackgroundColor(this.background));
   }
-  set fg (color) {
-    if (!Color.#COLORS.includes(color)) throw new Error(color + " is not a valid color");
-    this.#fg = color;
-    this.#out.write(`\x1b[3${Color.#COLORS.indexOf(color)}m`);
+  get foreground () {
+    return this.#foreground;
+  }
+  set foreground (color) {
+    this.#out.write(Color.getForegroundColor(color));
+    this.#foreground = color;
     this.emit("change");
   }
-  get bg () {
-    return this.#bg;
+  get background () {
+    return this.#background;
   }
-  set bg (color) {
-    if (!color.includes(color)) throw new Error(color + " is not a valid color");
-    this.#bg = color;
-    this.#out.write(`\x1b[4${Color.#COLORS.indexOf(color)}m`);
+  set background (color) {
+    this.#out.write(Color.getBackgroundColor(color));
+    this.#background = color;
     this.emit("change");
   }
   #out;
-  #fg;
-  #bg;
+  #foreground;
+  #background;
+  static getForegroundColor (color) {
+    const index = this.#COLORS.indexOf(color);
+    if (index === -1) throw new Error(color + " is not a valid color");
+    else return `\x1b[3${index}m`;
+  }
+  static getBackgroundColor(color) {
+    const index = this.#COLORS.indexOf(color);
+    if (index === -1) throw new Error(color + " is not a valid color");
+    else return `\x1b[4${index}m`;
+  }
+  static RESET = "\x1b[0m";
   static #COLORS = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
 }
 
@@ -72,14 +89,19 @@ module.exports.CMD = class CMD extends EventEmitter {
       },
       hasBorder: {
         value: !(config.border === "none")
+      },
+      dev: {
+        value: verify.config(config, "dev", false)
       }
     });
+    config.width = verify.config(config, "width", this.out.columns - 2 * this.largestBorder, false, -this.out.columns + 1, this.out.columns);
+    config.height = verify.config(config, "height", this.out.rows - 2, false, -this.out.rows + 1, this.out.rows);
     Object.defineProperties(this, {
       width: {
-        value: verify.config(config, "width", this.out.columns - 2 * this.largestBorder)
+        value: config.width < 0 ? this.out.columns - 2 * this.largestBorder + config.width : config.width
       },
       height: {
-        value: verify.config(config, "height", this.out.rows - 2)
+        value: config.height < 0 ? this.out.rows - 2 + config.height : config.height
       },
       color: {
         value: new Color(this.out)
@@ -89,50 +111,53 @@ module.exports.CMD = class CMD extends EventEmitter {
       value: new Margin(this.out, this.width, this.height)
     });
     if (config.color) {
-      if (config.color.fg) this.color.fg = config.color.fg;
-      if (config.color.bg) this.color.bg = config.color.bg;
+      if (config.color.foreground) this.color.foreground = config.color.foreground;
+      if (config.color.background) this.color.background = config.color.background;
     }
+    this.out.on("resize", () => this.#onresize());
+    this.color.on("change", () => this.#refresh());
     this.#onresize();
-    const onresize = this.#onresize.bind(this);
-    this.out.on("resize", () => onresize());
-    this.color.on("change", () => onresize());
     readline.emitKeypressEvents(process.stdin);
     this.in.setRawMode(true);
     this.in.on("keypress", (str, key) => {
       if (key.ctrl && !key.meta && !key.shift && key.name === "c") process.exit();
-      switch (key.code) {
-        case "[A":
-          this.emit("up", key);
-          break;
-        case "[B":
-          this.emit("down", key);
-          break;
-        case "[C":
-          this.emit("right", key);
-          break;
-        case "[D":
-          this.emit("left", key);
-          break;
+      else {
+        let eventName = "";
+        if (key.ctrl) eventName += "ctrl+";
+        if (key.meta) eventName += "alt+";
+        if (key.shift) eventName += "shift+";
+        eventName += key.name;
+        this.emit(eventName, key);
       }
     });
-    const out = this.out;
     process.on("exit", () => {
-      out.write("\x1b[0m");
-      out.cursorTo(0, this.out.rows - 1);
-      out.clearLine();
-      out.cursorTo(0, this.out.rows - 2);
+      this.out.write(Color.RESET);
+      if (this.dev) {
+        this.out.cursorTo(0, this.out.rows - 2 - this.#methodsCalled.length);
+        this.out.clearScreenDown();
+        for (let method of this.#methodsCalled) {
+          console.log(method);
+        }
+      }
+      else {
+        this.out.cursorTo(0, this.out.rows - 1);
+        this.out.clearLine();
+      }
+      this.out.cursorTo(0, this.out.rows - 2);
     })
   }
-  drawLine (x1, y1, x2, y2, thickness = 1, dashed = false, dashThickness = 0.5) {
-    this.#methodsCalled.push(this.drawLine.bind(this, x1, y1, x2, y2, thickness, dashed, dashThickness));
+  drawLine (x1, y1, x2, y2, color, thickness = 1, dashed = false, dashThickness = 0.5, spaceColor) {
+    this.#methodsCalled.push(this.drawLine.bind(this, x1, y1, x2, y2, color, thickness, dashed, dashThickness, spaceColor));
     if (this.tooBig) return;
     x1 = verify(x1, Number, "x1");
     y1 = verify(y1, Number, "y1");
     x2 = verify(x2, Number, "x2");
     y2 = verify(y2, Number, "y2");
+    if (color) this.out.write(Color.getForegroundColor(color));
     thickness = verify(thickness, 1, "thickness", false);
     dashed = verify(dashed, false, "dashed", false);
     dashThickness = verify(dashThickness, 0.5, "dashThickness", false);
+    if (spaceColor) this.out.write(Color.getBackgroundColor(spaceColor));
     if (x1 < 0 || x1 > this.width || x2 < 0 || x2 > this.width || y1 < 0 || y1 > this.height || y2 < 0 || y2 > this.height) throw new Error("Cannot draw line outside of box");
     const m = (y2 - y1) / (x2 - x1);
     const b = y1 - m * x1;
@@ -164,6 +189,9 @@ module.exports.CMD = class CMD extends EventEmitter {
           for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(CMD.#FULL);
         }
       }
+      this.out.write(Color.DEFAULT)
+      this.out.write(Color.getForegroundColor(this.color.foreground));
+      this.out.write(Color.getBackgroundColor(this.color.background));
     }
     else if (m === Infinity) { // Vertical line
       if (x1 + Math.ceil(-thickness / 2) < 0 || x1 + Math.ceil(thickness / 2) > this.width) throw new Error("Cannot draw line outside of box");
@@ -190,15 +218,17 @@ module.exports.CMD = class CMD extends EventEmitter {
       }
     }
     else throw new Error("Diagonal lines are not supported.");
+    if (color || spaceColor) this.color.refresh();
   }
-  drawBox (x, y, width, height) {
-    this.#methodsCalled.push(this.drawBox.bind(this, x, y, width, height));
+  drawBox (x, y, width, height, color) { // Cannot handle decimals
+    this.#methodsCalled.push(this.drawBox.bind(this, x, y, width, height, color));
     if (this.tooBig) return;
     x = verify(x, Number, "x");
     y = verify(y, Number, "y");
-    width = verify(width, Number, "width");
-    height = verify(height, Number, "height");
-    if (x < 0 || x > this.width || y < 0 || y > this.height || x + width > this.width || y + height > this.height) throw new Error("Box cannot be outside cmd");
+    width = verify(width, Number, "width", true, 0);
+    height = verify(height, Number, "height", true, 0);
+    if (color) this.out.write(Color.getForegroundColor(color));
+    if (x < 0 || y < 0 || x + width > this.width || y + height > this.height) throw new Error("Box cannot be outside cmd");
     x = roundToNearest(x, 0.5);
     y = roundToNearest(y, 0.5);
     width = roundToNearest(width, 0.5);
@@ -210,6 +240,19 @@ module.exports.CMD = class CMD extends EventEmitter {
         this.out.write(CMD.#FULL);
       }
     }
+    if (color) this.color.refresh();
+  }
+  write (text, x, y, color) {
+    this.#methodsCalled.push(this.write.bind(this, text, x, y, color));
+    if (this.tooBig) return;
+    text = text.toString().replace(/[\n\t]/g, "  ");
+    x = verify(x, 0, "x", false);
+    y = verify(y, 0, "y", false);
+    if (color) this.out.write(Color.getForegroundColor(color));
+    if (x < 0 || x + text.length > color || y < 0 || y > this.height) throw new Error("Text cannot be outside cmd");
+    this.out.cursorTo(this.margin.lr + Math.round(x), this.margin.tb + Math.round(y));
+    this.out.write(text);
+    if (color) this.color.refresh();
   }
   addSprite (sprite) {
     sprite = verify(sprite, Sprite, "sprite");
@@ -218,17 +261,30 @@ module.exports.CMD = class CMD extends EventEmitter {
     });
     this.#sprites.add(sprite);
   }
-  #onresize = function () {
+  #clear = function () {
     this.out.cursorTo(0, 0);
     this.out.clearScreenDown();
-    if (this.tooBig) this.out.write("Playing field is larger than terminal. Please make terminal larger to continue.");
+  }
+  #refresh = function () {
+    this.#drawBorder();
+    const methods = this.#methodsCalled.concat();
+    this.#methodsCalled = [];
+    for (let method of methods) {
+      method();
+    }
+  }
+  #onresize = function () {
+    this.#clear();
+    if (this.tooBig) {
+      if (!this.#frozenStartTime) this.#frozenStartTime = performance.now();
+      this.out.write(`Playing field is larger than terminal. Please make terminal larger to continue. width${this.width} height:${this.height}`);
+    }
     else {
-      this.#drawBorder();
-      const methods = this.#methodsCalled.concat();
-      this.#methodsCalled = [];
-      for (let method of methods) {
-        method();
+      if (this.#frozenStartTime) {
+        this.#frozen += performance.now() - this.#frozenStartTime;
+        this.#frozenStartTime = undefined;
       }
+      this.#refresh();
     }
   }
   #drawLineAcross = function () {
@@ -258,6 +314,11 @@ module.exports.CMD = class CMD extends EventEmitter {
   get largestBorder () {
     return Math.max(this.borderChars.topLeft.length, this.borderChars.vertical.length, this.borderChars.bottomLeft.length);
   }
+  get time () {
+    return performance.now() - this.#frozen;
+  }
+  #frozenStartTime;
+  #frozen = 0;
   #methodsCalled = [];
   #sprites = new Set();
   static #FULL = "\u2588";
@@ -309,19 +370,69 @@ module.exports.CMD = class CMD extends EventEmitter {
   }
 };
 
-module.exports.Sprite = class Sprite extends EventEmitter {
-  constructor (callback, config = {}) {
-    Object.defineProperty(this, "callback", {
-      value: verify(callback)
-    })
-    config.width = verify.config(config, "width", -1, false, 0);
-    config.height = verify.config(config, "height", -1, false, 0);
-    for (let key of Object.keys(config)) {
-      if (config[key] !== undefined) {
-        Object.defineProperty(this, key, {
-          value: config[key]
-        });
+class Sprite {
+  constructor (callback, config) {
+    if (callback instanceof (async () => {}).constructor) throw new Error("callback of a Sprite may not be an asynchronous function");
+    config = verify(config, {}, "config", false);
+    Object.defineProperties(this, {
+      callback: {
+        value: verify(callback, Function, "callback")
+      },
+      ignoreErrors: {
+        value: verify.config(config, "ignoreErrors", false)
+      },
+      preciseAxis: {
+        value: verify.config(config, "preciseAxis", "neither")
       }
+    });
+  }
+  draw (x = this.x, y = this.y, a = this.a) {
+    try {
+      this.callback(x, y, a);
+      this.#x = x;
+      this.#y = y;
+      this.#a = a;
+    }
+    catch (err) {
+      const callStack = new Error().stack.split("\n").slice(1);
+      if (this.ignoreErrors && callStack[0] !== callStack[1]) this.draw();
+      else throw err;
     }
   }
+  move (x1, y1, x2, y2, t) {
+    x1 = verify(x1, Number, "x1");
+    y1 = verify(y1, Number, "y1");
+    x2 = verify(x2, Number, "x2");
+    y2 = verify(y2, Number, "y2");
+    t = verify(t, Number, "t") * 1000;
+    const xv = (x2 - x1) / t;
+    const yv = (y2 - y1) / t;
+    const start = this.cmd.time;
+    const xRounder = this.preciseAxis === "x" ? x => x : Math.round;
+    const yRounder = this.preciseAxis === "y" ? y => y : Math.round;
+    const frame = () => {
+      if (!this.cmd.tooBig) {
+        this.draw(xRounder(x1 + xv * (this.cmd.time - start)), yRounder(y1 + yv * (this.cmd.time - start))); // The previous frame needs to be cleared
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  moveTo (x, y, t) {
+    this.move(this.x, this.y, x, y, t);
+  }
+  spin (a1, a2, t) {
+
+  }
+  spinTo (a, t) {
+    this.spin(this.a, a, t);
+  }
+  get x () { return this.#x; }
+  get y () { return this.#y; }
+  get a () { return this.#a; }
+  #x;
+  #y;
+  #a;
 };
+
+module.exports.Sprite = Sprite;

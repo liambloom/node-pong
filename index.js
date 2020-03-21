@@ -1,30 +1,43 @@
 // Get localhost IP address: os.networkInterfaces()["Wi-Fi 2"].find(e => e.family === "IPv4").address
 
 const flags = require("./flags")();
-const cmdDraw = require("./cmdDraw");
+const { CMD, Sprite } = require("./cmdDraw");
 console = require("./colorConsole");
 
-const cmd = new cmdDraw.CMD({
+const cmd = new CMD({
   width: flags.w || flags.width || 110,
   height: flags.h || flags.height || 30,
-  border: "solid"
+  border: "solid",
+  dev: flags.d || flags.dev
 });
 
 const fg = flags.c || flags.color || flags.fg || flags.foreground;
 const bg = flags.bg || flags.background || flags.backgroundColor;
 if (cmd.out.getColorDepth() === 1 && (fg || bg)) console.warn("Colors are not supported in your terminal");
 else {
-  cmd.color.fg = fg || "white";
-  cmd.color.bg = bg || "black";
+  cmd.color.foreground = fg || "white";
+  cmd.color.background = bg || "black";
 }
 
-cmd.drawLine(cmd.width / 2, 0, cmd.width / 2, cmd.height, 2, true, 0.5);
+//cmd.drawLine(cmd.width / 2, 0, cmd.width / 2, cmd.height, null, 2, true, 0.5);
 
-cmd.drawBox(6, cmd.height / 2 - 4, 2, 8);
-cmd.drawBox(cmd.width - 8, cmd.height / 2 - 4, 2, 8);
+const s = new Sprite((x, y) => {
+    //console.log(x, y);
+    cmd.drawBox(x, y, 2, 1, "cyan");
+  },
+  {
+    //ignoreErrors: true,
+    preciseAxis: "y" // This breaks cmd.drawBox because I never programmed it to accept decimals
+  }
+);
+cmd.addSprite(s);
+s.move(0, 0, cmd.width, cmd.height, 5);
 
-cmd.on("up", () => {
-  //console.log("up");
+/*cmd.drawBox(6, cmd.height / 2 - 4, 2, 8);
+cmd.drawBox(cmd.width - 8, cmd.height / 2 - 4, 2, 8);*/
+
+cmd.on("space", () => {
+  cmd.write(cmd.time);
 });
 
 
@@ -67,16 +80,6 @@ onresize();
 drawBorder();
 
 drawPaddle(6, height / 2);*/
-
-
-/*if (!global.requestAnimationFrame) {
-  global.requestAnimationFrame = callback => {
-    return setImmediate(() => {
-      callback(performance.now());
-    });
-  };
-  global.cancelAnimationFrame = global.clearImmediate;
-}*/
 
 /*let currentDots = 1;
 setInterval(() => {
