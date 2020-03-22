@@ -105,7 +105,13 @@ class Terminal extends EventEmitter {
       },
       color: {
         value: new Color(this.out)
-      }
+      }/*,
+      rl: {
+        value: readline.createInterface({
+          input: this.in,
+          output: this.out
+        })
+      }*/
     })
     Object.defineProperty(this, "margin", {
       value: new Margin(this.out, this.width, this.height)
@@ -114,6 +120,30 @@ class Terminal extends EventEmitter {
       if (config.color.foreground) this.color.foreground = config.color.foreground;
       if (config.color.background) this.color.background = config.color.background;
     }
+    this.#consoleBuffer = Buffer.alloc(this.width * this.height, " ");
+    const print = this.out.write.bind(this.out);
+    const to = this.out.cursorTo.bind(this.out);
+    this.out.cursorTo = function (x, y, callback) {
+      this.#consolePos.rows = x - this.margin.lr;
+      this.#consolePos.columns = y - this.margin.tb;
+      to(x, y, callback);
+      //console.log(JSON.stringify(this.#consolePos));
+    }.bind(this);
+    this.out.write = function (chunk, encoding, cb) {
+      //print(JSON.stringify(this.#consolePos) + " " + (this.#consolePos.columns > this.margin.lr) + " " + (this.#consolePos.columns + this.width < this.margin.lr)
+      //  + " " + (this.#consolePos.rows > this.margin.tb) + " " + (this.#consolePos.rows + this.height < this.margin.tb));
+      //process.exit();
+      if (this.#consolePos.columns >= 0 && this.#consolePos.columns <= this.width 
+        && this.#consolePos.rows >= 0 && this.#consolePos.rows <= this.height) {
+        //process.exit();
+        //print("\x1b[41m" + JSON.stringify(chunk) + " " + (this.#consolePos.rows + " " + this.width + " " + this.#consolePos.columns) + "\x1b[0m ");
+        const length = this.#consoleBuffer.write(chunk, this.#consolePos.rows * this.width + this.#consolePos.columns, undefined, encoding);
+        this.#consolePos.rows += Math.floor((this.#consolePos.columns + length) / this.width);
+        this.#consolePos.columns += length % this.width;
+        this.#consolePos.columns %= this.width;
+      }
+      print(chunk, encoding, cb);
+    }.bind(this);
     this.out.on("resize", () => this.#onresize());
     this.color.on("change", () => this.#refresh());
     this.#onresize();
@@ -121,7 +151,7 @@ class Terminal extends EventEmitter {
     this.in.setRawMode(true);
     this.in.on("keypress", (str, key) => {
       if (key.ctrl && !key.meta && !key.shift && key.name === "c") process.exit();
-      else {
+      else if (!this.tooBig) {
         let eventName = "";
         if (key.ctrl) eventName += "ctrl+";
         if (key.meta) eventName += "alt+";
@@ -132,26 +162,17 @@ class Terminal extends EventEmitter {
     });
     process.on("exit", () => {
       this.out.write(Color.RESET);
-      if (this.dev) {
-        this.out.cursorTo(0, this.out.rows - 2 - this.#methodsCalled.length);
-        this.out.clearScreenDown();
-        for (let method of this.#methodsCalled) {
-          console.log(method);
-        }
-      }
-      else {
-        this.out.cursorTo(0, this.out.rows - 1);
-        this.out.clearLine();
-      }
+      this.out.cursorTo(0, this.out.rows - 1);
+      this.out.clearLine();
+      if (this.dev) this.out.write("\x1b[33m\x1b[41m" + this.#consoleBuffer.toString("utf8") + "\x1b[0m");
       this.out.cursorTo(0, this.out.rows - 2);
     })
   }
   drawLine (x1, y1, x2, y2, color, thickness = 1, dashed = false, dashThickness = 0.5, spaceColor) {
     if (this.clearMode) {
       color = this.color.background;
-      spaceColor = this.color.background;
+      spaceColor = this.color.background; 
     }
-    this.#methodsCalled.push(this.drawLine.bind(this, x1, y1, x2, y2, color, thickness, dashed, dashThickness, spaceColor));
     if (this.tooBig) return;
     x1 = verify(x1, Number, "x1");
     y1 = verify(y1, Number, "y1");
@@ -210,6 +231,8 @@ class Terminal extends EventEmitter {
             for (let i = 0; i < dash.length; i++) {
               this.out.cursorTo(this.margin.lr + Math.floor(x1) + column, this.margin.tb + Math.floor(yMin) + row + i);
               this.out.write(dash[i]);
+              /*console.log(this.#consolePos);
+              process.exit();*/
             }
           }
         }
@@ -226,7 +249,6 @@ class Terminal extends EventEmitter {
   }
   drawBox (x, y, width, height, color) { // Cannot handle decimals
     if (this.clearMode) color = this.color.background;
-    this.#methodsCalled.push(this.drawBox.bind(this, x, y, width, height, color));
     if (this.tooBig) return;
     x = verify(x, Number, "x");
     y = verify(y, Number, "y");
@@ -262,7 +284,7 @@ class Terminal extends EventEmitter {
     if (color) this.color.refresh();
   }
   write (text, x, y, color) {
-    this.#methodsCalled.push(this.write.bind(this, text, x, y, color));
+    if (this.clearMode) color = this.color.background;
     if (this.tooBig) return;
     text = text.toString().replace(/[\n\t]/g, "  ");
     x = verify(x, 0, "x", false);
@@ -286,10 +308,9 @@ class Terminal extends EventEmitter {
   }
   #refresh = function () {
     this.#drawBorder();
-    const methods = this.#methodsCalled.concat();
-    this.#methodsCalled = [];
-    for (let method of methods) {
-      method();
+    for (let row = 0; row < this.height; row++) {
+      this.out.cursorTo(this.margin.lr, this.margin.tb + row);
+      this.out.write(this.#consoleBuffer.slice(row * this.width, (row + 1) * this.width - 1).toString("utf8"));
     }
   }
   #onresize = function () {
@@ -338,8 +359,12 @@ class Terminal extends EventEmitter {
   }
   clearMode = false;
   #frozenStartTime;
+  #consoleBuffer;
+  #consolePos = {
+    rows: 0,
+    columns: 0
+  };
   #frozen = 0;
-  #methodsCalled = [];
   #sprites = new Set();
   static #FULL = "\u2588";
   static #TOP = "\u2580";
