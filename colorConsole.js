@@ -10,7 +10,7 @@ else {
     this._stderr.write("\x1b[33m" + util.format(data, ...args) + "\x1b[0m\n");
   };
   colorConsole.debug = function debug(data, ...args) {
-    this._stderr.write("\x1b[36m" + util.format(data, ...args) + "\x1b[0m\n");
+    this._stdout.write("\x1b[36m" + util.format(data, ...args) + "\x1b[0m\n");
   };
   module.exports = colorConsole;
 }

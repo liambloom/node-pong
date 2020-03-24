@@ -1,5 +1,6 @@
 const EventEmitter = require('events');
 const readline = require("readline");
+const util = require("util");
 const { performance } = require("perf_hooks");
 const verify = require("./verifyType");
 require("./animation");
@@ -120,7 +121,7 @@ class Terminal extends EventEmitter {
       if (config.color.foreground) this.color.foreground = config.color.foreground;
       if (config.color.background) this.color.background = config.color.background;
     }
-    this.#consoleBuffer = Buffer.alloc(this.width * this.height, " ");
+    /*this.#consoleBuffer = Buffer.alloc(this.width * this.height, " ");
     const print = this.out.write.bind(this.out);
     const to = this.out.cursorTo.bind(this.out);
     this.out.cursorTo = function (x, y, callback) {
@@ -143,9 +144,9 @@ class Terminal extends EventEmitter {
         this.#consolePos.columns %= this.width;
       }
       print(chunk, encoding, cb);
-    }.bind(this);
-    this.out.on("resize", () => this.#onresize());
-    this.color.on("change", () => this.#refresh());
+    }.bind(this);*/
+    //this.out.on("resize", () => this.#onresize());
+    //this.color.on("change", () => this.#refresh());
     this.#onresize();
     readline.emitKeypressEvents(process.stdin);
     this.in.setRawMode(true);
@@ -164,7 +165,7 @@ class Terminal extends EventEmitter {
       this.out.write(Color.RESET);
       this.out.cursorTo(0, this.out.rows - 1);
       this.out.clearLine();
-      if (this.dev) this.out.write("\x1b[33m\x1b[41m" + this.#consoleBuffer.toString("utf8") + "\x1b[0m");
+      //if (this.dev) this.out.write("\x1b[33m\x1b[41m" + this.#consoleBuffer.toString("utf8") + "\x1b[0m");
       this.out.cursorTo(0, this.out.rows - 2);
     })
   }
@@ -269,11 +270,11 @@ class Terminal extends EventEmitter {
     }
     for (let row = 0; row < Math.floor(height - y % 1); row++) {
       this.out.cursorTo(Math.floor(this.margin.lr + x), Math.floor(this.margin.tb + row + Math.ceil(y)));
-      for (let column = 0; column < width; column++) {
-        if (x % 1 !== 0 && column === 0) this.out.write(Terminal.#RIGHT);
-        else if ((x + width) % 1 !== 0 && x + 1 >= width) this.out.write(Terminal.#LEFT);
-        else this.out.write(Terminal.#FULL);
+      if (x % 1 !== 0) this.out.write(Terminal.#RIGHT);
+      for (let column = 0; column < Math.floor(width - x % 1); column++) {
+        this.out.write(Terminal.#FULL);
       }
+      if ((x + width) % 1 !== 0) this.out.write(Terminal.#LEFT);
     }
     if ((y + height) % 1 !== 0) {
       this.out.cursorTo(this.margin.lr + x, Math.floor(this.margin.tb + y + height))
@@ -302,19 +303,49 @@ class Terminal extends EventEmitter {
     });
     this.#sprites.add(sprite);
   }
+  sevenBit (x, y, a, b, c, d, e, f, g) {
+    x = verify(x, Number, "x") + this.margin.lr;
+    y = verify(y, Number, "y") + this.margin.tb;
+    const on = Terminal.#FULL + Terminal.#FULL;
+    const off = "  ";
+    this.out.cursorTo(x, y);
+    this.out.write(a || f ? on : off);
+    this.out.write(a ? on : off);
+    this.out.write(a || b ? on : off);
+    this.out.cursorTo(x, y + 1);
+    this.out.write(f ? on : off);
+    this.out.write(off);
+    this.out.write(b ? on : off);
+    this.out.cursorTo(x, y + 2);
+    this.out.write(e || f || g ? on : off);
+    this.out.write(g ? on : off);
+    this.out.write(b || c || g ? on : off);
+    this.out.cursorTo(x, y + 3);
+    this.out.write(e ? on : off);
+    this.out.write(off);
+    this.out.write(c ? on : off);
+    this.out.cursorTo(x, y + 4);
+    this.out.write(d || e ? on : off);
+    this.out.write(d ? on : off);
+    this.out.write(c || d ? on : off);
+  }
   #clear = function () {
     this.out.cursorTo(0, 0);
     this.out.clearScreenDown();
   }
   #refresh = function () {
     this.#drawBorder();
-    for (let row = 0; row < this.height; row++) {
+    /*for (let row = 0; row < this.height; row++) {
       this.out.cursorTo(this.margin.lr, this.margin.tb + row);
       this.out.write(this.#consoleBuffer.slice(row * this.width, (row + 1) * this.width - 1).toString("utf8"));
-    }
+    }*/
   }
+  log = function debug(data, ...args) {
+    this.out.cursorTo(this.margin.lr + this.width + 2 * this.largestBorder, this.#logHeight++);
+    this.out.write("\x1b[36m" + util.format(data, ...args) + "\x1b[0m");
+  };
   #onresize = function () {
-    this.#clear();
+    this.#clear(); 
     if (this.tooBig) {
       if (!this.#frozenStartTime) this.#frozenStartTime = performance.now();
       this.out.write(`Playing field is larger than terminal. Please make terminal larger to continue. width${this.width} height:${this.height}`);
@@ -360,6 +391,7 @@ class Terminal extends EventEmitter {
   clearMode = false;
   #frozenStartTime;
   #consoleBuffer;
+  #logHeight = 0;
   #consolePos = {
     rows: 0,
     columns: 0
@@ -413,10 +445,25 @@ class Terminal extends EventEmitter {
       bottomRight: "\u2588\u2588"
     }
   }
+  static sevenBitPresets = {
+    numbers: {
+      "0": [true, true, true, true, true, true, false],
+      "1": [false, true, true, false, false, false, false],
+      "2": [true, true, false, true, true, false, true],
+      "3": [true, true, true, true, false, false, true],
+      "4": [false, true, true, false, false, true, true],
+      "5": [true, false, true, true, false, true, true],
+      "6": [true, false, true, true, true, true, true],
+      "7": [true, true, true, false, false, false, false],
+      "8": [true, true, true, true, true, true, true],
+      "9": [true, true, true, true, false, true, true]
+    }
+  }
 };
 
-class Sprite {
+class Sprite extends EventEmitter {
   constructor (callback, config) {
+    super();
     if (callback instanceof (async () => {}).constructor) throw new Error("callback of a Sprite may not be an asynchronous function");
     config = verify(config, {}, "config", false);
     Object.defineProperties(this, {
@@ -427,27 +474,41 @@ class Sprite {
         value: verify.config(config, "preciseAxis", "neither")
       }
     });
+    Object.defineProperties(this, {
+      xRounder: {
+        value: this.preciseAxis === "x" ? x => roundToNearest(x, 0.5) : Math.round
+      },
+      yRounder: {
+        value: this.preciseAxis === "y" ? y => roundToNearest(y, 0.5) : Math.round
+      }
+    });
     if (config.hasOwnProperty("speed")) {
       this.speed = config.speed;
     }
   }
   draw (x = this.x, y = this.y, ...args) {
+    if (this.x !== undefined && !this.terminal.clearMode) this.clear();
     this.#x = x;
     this.#y = y;
     this.callback(x, y, ...args);
+    this.emit("draw", x, y);
   }
   clear () {
-    if (this.#x !== undefined) {
+    const x = this.x;
+    const y = this.y
+    if (x !== undefined) {
       const clearMode = this.terminal.clearMode;
       this.terminal.clearMode = true;
-      this.draw(this.x, this.y, this.terminal.color.background);
+      this.draw(x, y, this.terminal.color.background);
       this.terminal.clearMode = clearMode;
+      this.#x = undefined;
+      this.#y = undefined;
+      this.emit("clear", x, y);
     }
-    this.#x = undefined;
-    this.#y = undefined;
   }
   stop () {
     cancelAnimationFrame(this.#frameId);
+    this.emit("stop", this.terminal.time);
   }
   move (x1, y1, x2, y2, t) {
     this.stop();
@@ -459,24 +520,25 @@ class Sprite {
     else t = verify(t, distance(x1, y1, x2, y2) / this.speed, "t", false) * 1000;
     const xv = (x2 - x1) / t;
     const yv = (y2 - y1) / t;
-    const xRounder = this.preciseAxis === "x" ? x => roundToNearest(x, 0.5) : Math.round;
-    const yRounder = this.preciseAxis === "y" ? y => roundToNearest(y, 0.5) : Math.round;
     const start = this.terminal.time;
     const frame = () => {
       const timeElapsed = this.terminal.time - start;
       if (timeElapsed > t) {
         this.stop();
-        this.clear();
+        //this.clear();
         this.draw(x2, y2);
+        this.emit("frame");
+        this.emit("moveEnded", x2, y2);
       }
       else {
-        const x = xRounder(x1 + xv * timeElapsed);
-        const y = yRounder(y1 + yv * timeElapsed);
+        const x = this.xRounder(x1 + xv * timeElapsed);
+        const y = this.yRounder(y1 + yv * timeElapsed);
         if (x !== this.x || y !== this.y) {
-          this.clear();
+          //this.clear();
           this.draw(x, y);
         }
         this.#frameId = requestAnimationFrame(frame);
+        this.emit("frame");
       }
     }
     this.#frameId = requestAnimationFrame(frame);
@@ -502,8 +564,6 @@ class Sprite {
     const k = -height + y1_2;
     const quadratic = x => a * (x - h) ** 2 + k;
     const time = distance / speed * 1000;
-    const xRounder = this.preciseAxis === "x" ? x => roundToNearest(x, 0.5) : Math.round;
-    const yRounder = this.preciseAxis === "y" ? y => roundToNearest(y, 0.5) : Math.round;
     const start = this.terminal.time;
     const frame = () => {
       //console.log("frame");
@@ -515,8 +575,8 @@ class Sprite {
       }
       else {
         //console.log(timeElapsed / speed + x1);
-        const x = xRounder(timeElapsed / speed + x1);
-        const y = yRounder(quadratic(timeElapsed / speed));
+        const x = this.xRounder(timeElapsed / speed + x1);
+        const y = this.yRounder(quadratic(timeElapsed / speed));
         //console.log(`(${x1}, ${y1_2}) -> (${x}, ${y})`);
         if (x !== this.x || y !== this.y) {
           this.clear();
@@ -557,6 +617,10 @@ class Box extends Sprite {
         value: height
       }
     })
+  }
+  touching (box) {
+    if (!(box instanceof Box)) throw new TypeError("Box.touching requires argument of type Box, received type " + box.constructor.name);
+    return !(box.x > this.x + this.width || box.x + box.width < this.x || box.y > this.y + this.height || box.y + box.height < this.y);
   }
 }
 
