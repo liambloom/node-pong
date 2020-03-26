@@ -37,14 +37,14 @@ function verify(value, fallback, valueName = "<value>", required = true, minValu
     else if (isNaN(value)) return useFallback(new Error(`${valueName} is NaN`));
     else if (isNaN(fallback)) return useFallback(new Error(`${valueName} must be NaN`));
     else {
-      if (value <= minValue) {
+      if (value < minValue) {
         throwIfRequired(new RangeError(`${valueName} ${required ? "must" : "should"} be at least ${minValue}`));
-        if (fallback <= minValue) return undefined;
+        if (fallback < minValue) return undefined;
         else return fallback;
       }
-      else if (value >= maxValue) {
+      else if (value > maxValue) {
         throwIfRequired(new RangeError(`${valueName} ${required ? "must" : "should"} be at most ${maxValue}`));
-        if (fallback >= maxValue) return undefined;
+        if (fallback > maxValue) return undefined;
         else return fallback;
       }
       else return value;

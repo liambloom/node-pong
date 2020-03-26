@@ -253,8 +253,8 @@ class Terminal extends EventEmitter {
     if (this.tooBig) return;
     x = verify(x, Number, "x");
     y = verify(y, Number, "y");
-    width = verify(width, Number, "width", true, 0);
-    height = verify(height, Number, "height", true, 0);
+    width = verify(width, Number, "width", true, 0.5);
+    height = verify(height, Number, "height", true, 0.5);
     if (color) this.out.write(Color.getForegroundColor(color));
     if (x < 0 || y < 0 || x + width > this.width || y + height > this.height) throw new Error(`Box cannot be outside terminal, was at (${x}, ${y})`);
     x = roundToNearest(x, 0.5);
@@ -296,6 +296,14 @@ class Terminal extends EventEmitter {
     this.out.write(text);
     if (color) this.color.refresh();
   }
+  clear () {
+    for (let sprite of this.#sprites) {
+      sprite.stop();
+      sprite.clear();
+    }
+    this.#clear();
+    this.#drawBorder();
+  }
   addSprite (sprite) {
     sprite = verify(sprite, Sprite, "sprite");
     Object.defineProperty(sprite, "terminal", {
@@ -303,32 +311,42 @@ class Terminal extends EventEmitter {
     });
     this.#sprites.add(sprite);
   }
-  sevenBit (x, y, a, b, c, d, e, f, g) {
-    x = verify(x, Number, "x") + this.margin.lr;
-    y = verify(y, Number, "y") + this.margin.tb;
-    const on = Terminal.#FULL + Terminal.#FULL;
-    const off = "  ";
-    this.out.cursorTo(x, y);
-    this.out.write(a || f ? on : off);
-    this.out.write(a ? on : off);
-    this.out.write(a || b ? on : off);
-    this.out.cursorTo(x, y + 1);
-    this.out.write(f ? on : off);
-    this.out.write(off);
-    this.out.write(b ? on : off);
-    this.out.cursorTo(x, y + 2);
-    this.out.write(e || f || g ? on : off);
-    this.out.write(g ? on : off);
-    this.out.write(b || c || g ? on : off);
-    this.out.cursorTo(x, y + 3);
-    this.out.write(e ? on : off);
-    this.out.write(off);
-    this.out.write(c ? on : off);
-    this.out.cursorTo(x, y + 4);
-    this.out.write(d || e ? on : off);
-    this.out.write(d ? on : off);
-    this.out.write(c || d ? on : off);
+  sevenSegment (x, y, a, b, c, d, e, f, g) {
+    this.bitmap(x, y, [
+      [a || f, a, a || b],
+      [f, false, b],
+      [e || f || g, g, b || c || g],
+      [e, false, c],
+      [d || e, d, c || d]
+    ]);
   }
+  bitmap (x, y, ...matrixes) {
+    x = Math.round(verify(x, Number, "x"));
+    y = Math.round(verify(y, Number, "y"));
+    const outsideTerminalError = new RangeError("bitmap must be drawn inside of terminal");
+    if (x < 0 || y < 0) throw outsideTerminalError;
+    const on = Terminal.#FULL.repeat(2);
+    const off = "  ";
+    if (matrixes.length < 1) throw new Error("At least one matrix is required by the bitmap function");
+    for (let matrix of matrixes) {
+      matrix = verify(matrix, Array, "matrix");
+      if (y + matrix.length >= this.height) throw outsideTerminalError;
+      for (let row in matrix) {
+        row = parseInt(row);
+        if (!Array.isArray(matrix[row])) throw new Error("3rd argument of bitmap must be a 2-dimensional array (a matrix)");
+        if (matrix[row].length >= this.width) throw outsideTerminalError;
+        this.out.cursorTo(x + this.margin.lr, y + row + this.margin.tb);
+        for (let column of matrix[row]) {
+          this.out.write(column ? on : off);
+        }
+      }
+      x += (matrix.sort((a, b) => b.length - a.length)[0].length + 1) * 2;
+    }
+  }
+  log(data, ...args) {
+    this.out.cursorTo(this.margin.lr + this.width + 2 * this.largestBorder, this.#logHeight++);
+    this.out.write("\x1b[36m" + util.format(data, ...args) + "\x1b[0m");
+  };
   #clear = function () {
     this.out.cursorTo(0, 0);
     this.out.clearScreenDown();
@@ -340,10 +358,6 @@ class Terminal extends EventEmitter {
       this.out.write(this.#consoleBuffer.slice(row * this.width, (row + 1) * this.width - 1).toString("utf8"));
     }*/
   }
-  log = function debug(data, ...args) {
-    this.out.cursorTo(this.margin.lr + this.width + 2 * this.largestBorder, this.#logHeight++);
-    this.out.write("\x1b[36m" + util.format(data, ...args) + "\x1b[0m");
-  };
   #onresize = function () {
     this.#clear(); 
     if (this.tooBig) {
@@ -445,7 +459,7 @@ class Terminal extends EventEmitter {
       bottomRight: "\u2588\u2588"
     }
   }
-  static sevenBitPresets = {
+  static sevenSegmentPresets = {
     numbers: {
       "0": [true, true, true, true, true, true, false],
       "1": [false, true, true, false, false, false, false],
@@ -457,6 +471,192 @@ class Terminal extends EventEmitter {
       "7": [true, true, true, false, false, false, false],
       "8": [true, true, true, true, true, true, true],
       "9": [true, true, true, true, false, true, true]
+    }
+  }
+  static bitmapPresets = {
+    letters: {
+      A: [
+        [false, true, false],
+        [true, false, true],
+        [true, false, true],
+        [true, true, true],
+        [true, false, true]
+      ],
+      B: [
+        [true, true, false],
+        [true, false, true],
+        [true, true, false],
+        [true, false, true],
+        [true, true, false]
+      ],
+      C: [
+        [false, true, true],
+        [true, false, false],
+        [true, false, false],
+        [true, false, false],
+        [false, true, true]
+      ],
+      D: [
+        [true, true, false],
+        [true, false, true],
+        [true, false, true],
+        [true, false, true],
+        [true, true, false]
+      ],
+      E: [
+        [true, true, true],
+        [true, false, false],
+        [true, true, true],
+        [true, false, false],
+        [true, true, true]
+      ],
+      F: [
+        [true, true, true],
+        [true, false, false],
+        [true, true, true],
+        [true, false, false],
+        [true, false, false],
+      ],
+      G: [
+        [false, true, true],
+        [true, false, false],
+        [true, false, true],
+        [true, false, true],
+        [false, true, true]
+      ],
+      H: [
+        [true, false, true],
+        [true, false, true],
+        [true, true, true],
+        [true, false, true],
+        [true, false, true]
+      ],
+      I: [
+        [true, true, true],
+        [false, true, false],
+        [false, true, false],
+        [false, true, false],
+        [true, true, true],
+      ],
+      J: [
+        [true, true, true],
+        [false, false, true],
+        [false, false, true],
+        [true, false, true],
+        [false, true, false]
+      ],
+      K: [
+        [true, false, true],
+        [true, false, true],
+        [true, true, false],
+        [true, false, true],
+        [true, false, true]
+      ],
+      L: [
+        [true, false, false],
+        [true, false, false],
+        [true, false, false],
+        [true, false, false],
+        [true, true, true]
+      ],
+      M: [
+        [true, true, true, true, true],
+        [true, false, true, false, true],
+        [true, false, true, false, true],
+        [true, false, true, false, true],
+        [true, false, false, false, true]
+      ],
+      N: [
+        [true, true, true],
+        [true, false, true],
+        [true, false, true],
+        [true, false, true],
+        [true, false, true]
+      ],
+      O: [
+        [true, true, true],
+        [true, false, true],
+        [true, false, true],
+        [true, false, true],
+        [true, true, true]
+      ],
+      P: [
+        [true, true, false],
+        [true, false, true],
+        [true, true, false],
+        [true, false, false],
+        [true, false, false]
+      ],
+      Q: [
+        [true, true, false],
+        [true, false, true],
+        [true, true, false],
+        [false, false, true],
+        [false, false, true]
+      ],
+      R: [
+        [true, true, false],
+        [true, false, true],
+        [true, true, false],
+        [true, false, true],
+        [true, false, true]
+      ],
+      S: [
+        [true, true, true],
+        [true, false, false],
+        [true, true, true],
+        [false, false, true],
+        [true, true, true]
+      ],
+      T: [
+        [true, true, true],
+        [false, true, false],
+        [false, true, false],
+        [false, true, false],
+        [false, true, false]
+      ],
+      U: [
+        [true, false, true],
+        [true, false, true],
+        [true, false, true],
+        [true, false, true],
+        [true, true, true],
+      ],
+      V: [
+        [true, false, true],
+        [true, false, true],
+        [true, false, true],
+        [true, false, true],
+        [false, true, false],
+      ],
+      W: [
+        [true, false, true, false, true],
+        [true, false, true, false, true],
+        [true, false, true, false, true],
+        [true, false, true, false, true],
+        [false, true, false, true, false],
+      ],
+      X: [
+        [true, false, true],
+        [true, false, true],
+        [false, true, false],
+        [true, false, true],
+        [true, false, true]
+      ],
+      Y: [
+        [true, false, true],
+        [true, false, true],
+        [true, true, true],
+        [false, true, false],
+        [false, true, false],
+      ],
+      Z: [
+        [true, true, true],
+        [false, false, true],
+        [false, true, false],
+        [true, false, false],
+        [true, true, true]
+      ]
     }
   }
 };
@@ -618,8 +818,13 @@ class Box extends Sprite {
       }
     })
   }
-  touching (box) {
+  touching (box, log = false) {
     if (!(box instanceof Box)) throw new TypeError("Box.touching requires argument of type Box, received type " + box.constructor.name);
+    if (log) {
+      this.terminal.log("this.x:%d this.y:%d this.width:%d this.height:%d", this.x, this.y, this.width, this.height)
+      this.terminal.log("box.x:%d box.y:%d box.width:%d box.height:%d", box.x, box.y, box.width, box.height);
+      this.terminal.log(box.x > this.x + this.width, box.x + box.width < this.x, box.y > this.y + this.height, box.y + box.height < this.y);
+    }
     return !(box.x > this.x + this.width || box.x + box.width < this.x || box.y > this.y + this.height || box.y + box.height < this.y);
   }
 }

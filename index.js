@@ -2,32 +2,35 @@
 
 /**
  * Todo:
- *  Make cpu player work
  *  Make winning do something other than throw an error (error because there is no preset 7-bit 10)
- *  Make bouncing off paddles work
- *  Fix bug where if ball ends up in corner of field it just stops and flickers
  */
 
 "use strict";
 const flags = require("./flags")();
-const { Terminal, Sprite, Box } = require("./cmdDraw");
+const { Terminal, Box } = require("./cmdDraw");
 console = require("./colorConsole");
 
 const random = (min, max) => Math.random() * (max - min) + min;
 const randomSlope = (min, max) => Math.tan(random(Math.atan(min), Math.atan(max)));
+function directionFunc (n, direction) {
+  const min = 0;
+  const max = terminal.width - ball.width;
+  if (Math.abs(n) === Infinity) {
+    if (direction === "right") return max;
+    else return min;
+  }
+  else return Math.min(Math.max(n, min), max);
+}
 function nextPoint (slope, direction) {
   const directionMod = direction === "right" ? 1 : -1;
-  let directionFunc;
-  if (direction === "right") directionFunc = n => Math.min(n, terminal.width - ball.width);
-  else directionFunc = n => n === Infinity ? 0 : Math.max(n, 0);
   const ballYInt = -slope * ball.x + ball.y;
-  //terminal.log(`y=${slope}x+${ballYInt}`);
-  //terminal.log(directionMod * slope);
-  const x = directionFunc(directionMod * slope < 0 ? -ballYInt / slope : (terminal.height - ball.height - ballYInt) / slope);
-  //terminal.log(x);
-  return [ball.xRounder(x), ball.yRounder(slope * x + ballYInt)];
+  const x = directionFunc(directionMod * slope < 0 ? -ballYInt / slope : (terminal.height - ball.height - ballYInt) / slope, direction);
+  const y = ball.yRounder(slope * x + ballYInt);
+  if (x > paddleX + paddleWidth) leftPaddle.moveTo(paddleX, Math.min(Math.max(y + 1 - paddleHeight / 2, 0), terminal.height - paddleHeight));
+  else leftPaddle.moveTo(paddleX, ball.yRounder(Math.min(Math.max(slope * (paddleX + paddleWidth) + ballYInt + 1 - paddleHeight / 2, 0), terminal.height - paddleHeight)));
+  return [ball.xRounder(x), y];
 }
-const writeScore = (score, location) => terminal.sevenBit(location === "right" ? rightScoreX : leftScoreX, 1, ...Terminal.sevenBitPresets.numbers[score]);
+const writeScore = (score, location) => terminal.sevenSegment(location === "right" ? rightScoreX : leftScoreX, 1, ...Terminal.sevenSegmentPresets.numbers[score]);
 
 const terminal = new Terminal({
   width: flags.w || flags.width || 110,
@@ -47,16 +50,16 @@ const paddleWidth = 2;
 const paddleX = 7;
 const leftScoreX = Math.floor(terminal.width / 4 - 3);
 const rightScoreX = Math.ceil(3 * terminal.width / 4 - 3);
+const difficulty = flags.d || flags.difficulty;
 let cpuScore = 0;
 let playerScore = 0;
-let framesSincePaddleMoved = 0;
 let ballDirection = Math.round(Math.random()) ? "left" : "right";
 let ballSlope, bouncedOff;
 
 const drawCenterLine = () => terminal.drawLine(centerX, 0, centerX, terminal.height, null, 2, true, 0.5);
 drawCenterLine();
 
-const leftPaddle = new Box(paddleWidth, paddleHeight, { speed: 10 });
+const leftPaddle = new Box(paddleWidth, paddleHeight, { speed: flags.cpuSpeed || (difficulty === 1 || difficulty === "easy" ? 10 : difficulty === 3 || difficulty === "hard" ? 20 : difficulty === 4 || difficulty === "imposable" ? 30 : 15) });
 const rightPaddle = new Box(paddleWidth, paddleHeight, { speed: 30 });
 const ball = new Box(2, 1, { speed: 30 });
 
@@ -65,6 +68,8 @@ terminal.addSprite(rightPaddle);
 terminal.addSprite(ball);
 
 function resetPaddles () {
+  leftPaddle.stop();
+  rightPaddle.stop();
   leftPaddle.draw(paddleX, centerY - paddleHeight / 2);
   rightPaddle.draw(terminal.width - paddleX - paddleWidth, centerY - paddleHeight / 2);
 }
@@ -79,66 +84,85 @@ terminal.on("down", () => {
 function resetBall () {
   bouncedOff = undefined;
   ballSlope = randomSlope(-0.5, 0.5);
+  ball.speed = 30;
   ball.clear();
   setTimeout(() => {
-    //terminal.log("foo");
     ball.draw(centerX - 1, centerY);
-    //terminal.log("bar");
-    //bounce();
-    ball.moveTo(...nextPoint(ballSlope, ballDirection));
-    //terminal.log("buz");
+    bounce();
   }, 200);
 }
 function bounce () {
   ball.moveTo(...nextPoint(ballSlope, ballDirection));
 }
 
-//console.log(randomSlope(-1, 1));
-
 ball.on("clear", (x, y) => {
   if (x <= centerX && x >= centerX - 2) drawCenterLine();
-  else if (!(y + ball.height < 1 || y > 5)) {
+  else if (!(y + ball.height < 1 || y > 6)) {
     if (!(x + ball.width < leftScoreX || x >= leftScoreX + 6)) writeScore(cpuScore, "left");
     else if (!(x + ball.width < rightScoreX || x >= rightScoreX + 6)) writeScore(playerScore, "right");
   }
 });
 ball.on("frame", () => {
-  //terminal.log("frame");
-  if (bouncedOff !== rightPaddle && ball.touching(rightPaddle)) {
-    ball.stop();
-    ballDirection = "left";
-    ballSlope = Math.tan(Math.PI * (leftPaddle.y - ball.y - 4) / 36);
-    terminal.log((leftPaddle.y - ball.y - 4) / 12960);
-    bouncedOff = rightPaddle;
-    bounce();
+  if (ball.touching(rightPaddle)) {
+    rightPaddle.draw();
+    if (bouncedOff !== rightPaddle) {
+      ball.stop();
+      ballDirection = "left";
+      ballSlope = ((rightPaddle.y + paddleHeight / 2) - (ball.y + 0.5)) / ((terminal.width - paddleX) - Math.min(ball.x + 1, terminal.width - paddleX - 1)) / 1.5 + (Math.random() - 0.5) / 5;
+      ball.speed += 10;
+      bouncedOff = rightPaddle;
+      bounce();
+    }
   }
-  else if (bouncedOff !== leftPaddle && ball.touching(leftPaddle)) {
-    ball.stop();
-    ballDirection = "right";
-    ballSlope = Math.tan(-Math.PI * (leftPaddle.y - ball.y - 4) / 36);
-    terminal.log(-(leftPaddle.y - ball.y - 4) / 0.1);
-    bouncedOff = leftPaddle;
-    bounce();
+  else if (ball.touching(leftPaddle)) {
+    leftPaddle.draw();
+    if (bouncedOff !== leftPaddle) {
+      ball.stop();
+      ballDirection = "right";
+      ballSlope = ((rightPaddle.y + paddleHeight / 2) - (ball.y + 0.5)) / ((terminal.width - paddleX) - Math.max(ball.x + 1, paddleX + 1)) / 1.5 + (Math.random() - 0.5) / 5;
+      ball.speed += 10;
+      bouncedOff = leftPaddle;
+      bounce();
+    }
   }
-  if (!(framesSincePaddleMoved++ % 100)) leftPaddle.moveTo(paddleX, Math.max(0, Math.min(terminal.height - paddleHeight, ball.y - (paddleHeight - ball.height) / 2)));
 });
 ball.on("moveEnded", () => {
-  //terminal.log(ball.y);
-  if (ball.y === 0 || ball.y === terminal.height - 1) {
-    ballSlope *= -1;
-    bounce();
-  }
-  else {
-    if (ball.x === 0) {
-      writeScore(++playerScore, "right");
-      ballDirection = "left";
+  if (ball.x === 0) {
+    if (++playerScore === 1) {
+      const letters = Terminal.bitmapPresets.letters;
+      terminal.removeAllListeners();
+      terminal.clear();
+      terminal.bitmap(terminal.width / 2 - 27, terminal.height / 2 - 2.5, letters.Y, letters.O, letters.U);
+      terminal.bitmap(terminal.width / 2 + 1, terminal.height / 2 - 2.5, letters.W, letters.I, letters.N);
+      process.exit();
     }
     else {
-      writeScore(++cpuScore, "left");
-      ballDirection = "right";
+      writeScore(playerScore, "right");
+      ballDirection = "left";
+      resetPaddles();
+      resetBall();
     }
-    resetPaddles();
-    resetBall();
+  }
+  else if (ball.x === terminal.width - ball.width) {
+    if (++cpuScore === 1) {
+      const letters = Terminal.bitmapPresets.letters;
+      terminal.removeAllListeners();
+      terminal.clear();
+      terminal.bitmap(terminal.width / 2 - 34, terminal.height / 2 - 2.5, letters.Y, letters.O, letters.U);
+      terminal.bitmap(terminal.width / 2 - 6, terminal.height / 2 - 2.5, letters.L, letters.O, letters.O, letters.S, letters.E);
+      process.exit();
+    }
+    else {
+      writeScore(cpuScore, "left");
+      ballDirection = "right";
+      resetPaddles();
+      resetBall();
+    }
+  }
+  else if (ball.y === 0 || ball.y === terminal.height - 1) {
+    ballSlope *= -1;
+    bounce();
+    return;
   }
 });
 /*leftPaddle.on("stop", () => {
