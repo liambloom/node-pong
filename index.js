@@ -2,7 +2,7 @@
 
 /**
  * Todo:
- *  Make winning do something other than throw an error (error because there is no preset 7-bit 10)
+ *  Resize handling
  */
 
 "use strict";
@@ -36,6 +36,7 @@ const terminal = new Terminal({
   width: flags.w || flags.width || 110,
   height: flags.h || flags.height || 30,
   border: "solid",
+  dev: flags.d || flags.dev,
   color: {
     foreground: flags.c || flags.color || flags.fg || flags.foreground || "white",
     background: flags.bg || flags.background || flags.backgroundColor || "black"
@@ -49,7 +50,6 @@ const paddleWidth = 2;
 const paddleX = 7;
 const leftScoreX = Math.floor(terminal.width / 4 - 3);
 const rightScoreX = Math.ceil(3 * terminal.width / 4 - 3);
-const letters = Terminal.bitmapPresets.letters;
 const borders = Terminal.BORDERS.double;
 borders.horizontalDown = "\u2566";
 borders.horizontalUp = "\u2569";
@@ -60,7 +60,7 @@ let ballSlope, bouncedOff;
 
 const drawCenterLine = () => terminal.drawLine(centerX, 0, centerX, terminal.height, null, 2, true, 0.5);
 
-const leftPaddle = new Box(paddleWidth, paddleHeight,);
+const leftPaddle = new Box(paddleWidth, paddleHeight);
 const rightPaddle = new Box(paddleWidth, paddleHeight, { speed: 30 });
 const ball = new Box(2, 1, { speed: 30 });
 
@@ -90,6 +90,7 @@ function bounce() {
 }
 
 function init () {
+  terminal.removeAllListeners();
   terminal.clear();
 
   terminal.on("up", () => {
@@ -140,13 +141,12 @@ function init () {
         const y = terminal.height / 2 - 2.5;
         terminal.removeAllListeners();
         terminal.clear();
-        terminal.bitmap(x, y, letters.Y, letters.O, letters.U);
-        terminal.bitmap(x + 28, y, ...(playerScored ? [letters.W, letters.I, letters.N, Terminal.bitmapPresets.punctuation["!"]] : [letters.L, letters.O, letters.O, letters.S, letters.E]));
+        terminal.writeLarge(playerScored ? "You Win!" : "You Loose", x, y);
         process.exit();
       }
       else {
-        writeScore(score, ballDirection);
         ballDirection = playerScored ? "left" : "right";
+        writeScore(score, playerScored ? "right" : "left");
         reset();
       }
     }
@@ -155,9 +155,6 @@ function init () {
       bounce();
     }
   });
-  /*leftPaddle.on("stop", () => {
-    throw new Error("Stopped");
-  });*/
 
   writeScore(0, "left");
   writeScore(0, "right");
@@ -167,7 +164,7 @@ function init () {
 }
 
 
-terminal.bitmap(terminal.width / 2 - 15, terminal.height / 3 - 2.5, letters.P, letters.O, letters.N, letters.G);
+terminal.writeLarge("PONG", terminal.width / 2 - 15, terminal.height / 3 - 2.5);
 terminal.write("\x1b[4mBy Liam Bloom\x1b[0m", terminal.width / 2 - 6.5, terminal.height / 3 + 3.5);
 terminal.color.refresh();
 terminal.write(borders.topLeft + 

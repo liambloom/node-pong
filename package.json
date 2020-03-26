@@ -1,6 +1,6 @@
 {
   "name": "command-line-pong",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "This is pong in the command line",
   "main": "index.js",
   "scripts": {
@@ -21,6 +21,6 @@
     "url": "https://github.com/liambloom/node-pong"
   },
   "author": "Liam Bloom (https://liambloom.herokuapp.com)",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {}
 }

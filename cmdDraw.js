@@ -311,22 +311,46 @@ class Terminal extends EventEmitter {
     });
     this.#sprites.add(sprite);
   }
-  sevenSegment (x, y, a, b, c, d, e, f, g) {
-    this.bitmap(x, y, [
+  sevenSegment (x, y, a, b, c, d, e, f, g, color) {
+    this.bitmap(x, y, color, this.sevenSegmentToBitmap(a, b, c, d, e, f, g));
+  }
+  sevenSegmentToBitmap (a, b, c, d, e, f, g) {
+    return [
       [a || f, a, a || b],
       [f, false, b],
       [e || f || g, g, b || c || g],
       [e, false, c],
       [d || e, d, c || d]
-    ]);
+    ];
   }
-  bitmap (x, y, ...matrixes) {
+  writeLarge (text, x, y, color) {
+    let matrixes = [];
+    text = verify(text, String, "text").toUpperCase();
+    for (let i of text) {
+      if (/\d/.test(i)) matrixes.push(this.sevenSegmentToBitmap(Terminal.sevenSegmentPresets.numbers[i]));
+      else if (/[a-z]/i.test(i)) matrixes.push(Terminal.bitmapPresets.letters[i]);
+      else if (/[\.!?]/.test(i)) matrixes.push(Terminal.bitmapPresets.punctuation[i]);
+      else if (/\s/.test(i)) matrixes.push([[false], [false], [false], [false], [false]]);
+      else throw new Error(`Character "${i}" is not recognized, in order to print it you must create your own bitmap`);
+    }
+    this.bitmap(x, y, color, ...matrixes);
+  }
+  bitmap (x, y, color, ...matrixes) {
+    if (this.clearMode) color = this.color.background;
+    if (this.tooBig) return;
     x = Math.round(verify(x, Number, "x"));
     y = Math.round(verify(y, Number, "y"));
     const outsideTerminalError = new RangeError("bitmap must be drawn inside of terminal");
     if (x < 0 || y < 0) throw outsideTerminalError;
     const on = Terminal.FULL.repeat(2);
     const off = "  ";
+    if (color) {
+      if (Array.isArray(color)) {
+        matrixes.push(color);
+        color = undefined;
+      }
+      else this.out.write(Color.getForegroundColor(color));
+    }
     if (matrixes.length < 1) throw new Error("At least one matrix is required by the bitmap function");
     for (let matrix of matrixes) {
       matrix = verify(matrix, Array, "matrix");
@@ -342,6 +366,7 @@ class Terminal extends EventEmitter {
       }
       x += (matrix.sort((a, b) => b.length - a.length)[0].length + 1) * 2;
     }
+    if (color) this.color.refresh();
   }
   log(data, ...args) {
     this.out.cursorTo(this.margin.lr + this.width + 2 * this.largestBorder, this.#logHeight++);
