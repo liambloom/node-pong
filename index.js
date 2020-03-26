@@ -53,10 +53,7 @@ const rightScoreX = Math.ceil(3 * terminal.width / 4 - 3);
 const borders = Terminal.BORDERS.double;
 borders.horizontalDown = "\u2566";
 borders.horizontalUp = "\u2569";
-let cpuScore = 0;
-let playerScore = 0;
-let ballDirection = Math.round(Math.random()) ? "left" : "right";
-let ballSlope, bouncedOff;
+let cpuScore, playerScore, ballDirection, ballSlope, bouncedOff;
 
 const drawCenterLine = () => terminal.drawLine(centerX, 0, centerX, terminal.height, null, 2, true, 0.5);
 
@@ -90,6 +87,11 @@ function bounce() {
 }
 
 function init () {
+  cpuScore = 0;
+  playerScore = 0;
+  ballDirection = Math.round(Math.random()) ? "left" : "right";
+
+  ball.removeAllListeners();
   terminal.removeAllListeners();
   terminal.clear();
 
@@ -142,7 +144,9 @@ function init () {
         terminal.removeAllListeners();
         terminal.clear();
         terminal.writeLarge(playerScored ? "You Win!" : "You Loose", x, y);
-        process.exit();
+        terminal.write("Press R to restart, Q to quit", terminal.width / 2 - 15.5, terminal.height / 2 + 3.5);
+        terminal.once("r", init);
+        terminal.on("q", () => process.exit());
       }
       else {
         ballDirection = playerScored ? "left" : "right";

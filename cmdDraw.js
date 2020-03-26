@@ -735,16 +735,16 @@ class Sprite extends EventEmitter {
     }
   }
   draw (x = this.x, y = this.y, ...args) {
-    if (this.x !== undefined && !this.terminal.clearMode) this.clear();
+    if (this.showing && !this.terminal.clearMode) this.clear();
     this.#x = x;
     this.#y = y;
     this.callback(x, y, ...args);
     this.emit("draw", x, y);
   }
   clear () {
-    const x = this.x;
-    const y = this.y
-    if (x !== undefined) {
+    if (this.showing) {
+      const x = this.x;
+      const y = this.y;
       const clearMode = this.terminal.clearMode;
       this.terminal.clearMode = true;
       this.draw(x, y, this.terminal.color.background);
@@ -837,6 +837,9 @@ class Sprite extends EventEmitter {
   }*/
   get x () { return this.#x; }
   get y () { return this.#y; }
+  get showing () {
+    return this.x !== undefined && this.y !== undefined && !this.terminal.tooBig;
+  }
   get speed () {
     return this.#speed;
   } 
