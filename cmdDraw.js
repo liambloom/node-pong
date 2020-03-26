@@ -82,7 +82,7 @@ class Terminal extends EventEmitter {
         value: verify.config(config, "out", process.stdout)
       },
       borderChars: {
-        value: Terminal.#BORDERS[verify.config(config, "border", "light")] || (() => { throw new Error(`config.${config.border} is not a valid border type`); })()
+        value: Terminal.BORDERS[verify.config(config, "border", "light")] || (() => { throw new Error(`config.${config.border} is not a valid border type`); })()
       },
       // The following 2 could go in any set of property definitions
       in: {
@@ -196,9 +196,9 @@ class Terminal extends EventEmitter {
         if (dashed) {
           let dash = "";
           const startWithHalf = roundToNearest(xMin, 0.5) % 1;
-          if (startWithHalf) dash += Terminal.#RIGHT;
-          for (let column = 0; column < Math.floor(startWithHalf ? dashThickness - 0.5 : dashThickness); column++) dash += Terminal.#FULL;
-          if (roundToNearest(xMin + dashThickness, 0.5) % 1) dash += Terminal.#LEFT;
+          if (startWithHalf) dash += Terminal.RIGHT;
+          for (let column = 0; column < Math.floor(startWithHalf ? dashThickness - 0.5 : dashThickness); column++) dash += Terminal.FULL;
+          if (roundToNearest(xMin + dashThickness, 0.5) % 1) dash += Terminal.LEFT;
           for (let column = 0; column < Math.floor(Math.abs(x2 - x1) / dashThickness) * dashThickness; column += dashThickness * 2) {
             this.out.cursorTo(this.margin.lr + Math.floor(xMin) + column, this.margin.tb + Math.floor(y1) + row);
             this.out.write(dash);
@@ -206,13 +206,13 @@ class Terminal extends EventEmitter {
         }
         /*else if (roundToNearest(y1, 0.5) % 1) {
           this.out.cursorTo(this.margin.lr + Math.round(xMin), this.margin.tb + Math.floor(y1) + row);
-          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.#BOTTOM);
+          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.BOTTOM);
           this.out.cursorTo(this.margin.lr + Math.round(xMin), this.margin.tb + Math.ceil(y1) + row);
-          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.#TOP);
+          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.TOP);
         }*/
         else {
           this.out.cursorTo(this.margin.lr + Math.round(xMin), this.margin.tb + Math.round(y1) + row);
-          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.#FULL);
+          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.FULL);
         }
       }
       this.out.write(Color.DEFAULT)
@@ -225,9 +225,9 @@ class Terminal extends EventEmitter {
         if (dashed) {
           let dash = [];
           const startWithHalf = roundToNearest(yMin, 0.5) % 1;
-          if (startWithHalf) dash.push(Terminal.#BOTTOM);
-          for (let row = 0; row < Math.floor(startWithHalf ? dashThickness - 0.5 : dashThickness); row++) dash.push(Terminal.#FULL);
-          if (roundToNearest(yMin + dashThickness, 0.5) % 1) dash.push(Terminal.#TOP);
+          if (startWithHalf) dash.push(Terminal.BOTTOM);
+          for (let row = 0; row < Math.floor(startWithHalf ? dashThickness - 0.5 : dashThickness); row++) dash.push(Terminal.FULL);
+          if (roundToNearest(yMin + dashThickness, 0.5) % 1) dash.push(Terminal.TOP);
           for (let row = 0; row < Math.floor(Math.abs(y2 - y1) / dashThickness) * dashThickness; row += dashThickness * 2) {
             for (let i = 0; i < dash.length; i++) {
               this.out.cursorTo(this.margin.lr + Math.floor(x1) + column, this.margin.tb + Math.floor(yMin) + row + i);
@@ -240,7 +240,7 @@ class Terminal extends EventEmitter {
         else {
           for (let row = 0; row < Math.abs(y2 - y1); row++) {
             this.out.cursorTo(this.margin.lr + Math.round(x1) + column, this.margin.tb + Math.round(yMin) + row);
-            this.out.write(Terminal.#FULL);
+            this.out.write(Terminal.FULL);
           }
         }
       }
@@ -265,21 +265,21 @@ class Terminal extends EventEmitter {
     if (y % 1 !== 0) {
       this.out.cursorTo(this.margin.lr + x, Math.floor(this.margin.tb + y))
       for (let column = 0; column < width; column++) {
-        this.out.write(Terminal.#BOTTOM);
+        this.out.write(Terminal.BOTTOM);
       }
     }
     for (let row = 0; row < Math.floor(height - y % 1); row++) {
       this.out.cursorTo(Math.floor(this.margin.lr + x), Math.floor(this.margin.tb + row + Math.ceil(y)));
-      if (x % 1 !== 0) this.out.write(Terminal.#RIGHT);
+      if (x % 1 !== 0) this.out.write(Terminal.RIGHT);
       for (let column = 0; column < Math.floor(width - x % 1); column++) {
-        this.out.write(Terminal.#FULL);
+        this.out.write(Terminal.FULL);
       }
-      if ((x + width) % 1 !== 0) this.out.write(Terminal.#LEFT);
+      if ((x + width) % 1 !== 0) this.out.write(Terminal.LEFT);
     }
     if ((y + height) % 1 !== 0) {
       this.out.cursorTo(this.margin.lr + x, Math.floor(this.margin.tb + y + height))
       for (let column = 0; column < width; column++) {
-        this.out.write(Terminal.#TOP);
+        this.out.write(Terminal.TOP);
       }
     }
     if (color) this.color.refresh();
@@ -325,7 +325,7 @@ class Terminal extends EventEmitter {
     y = Math.round(verify(y, Number, "y"));
     const outsideTerminalError = new RangeError("bitmap must be drawn inside of terminal");
     if (x < 0 || y < 0) throw outsideTerminalError;
-    const on = Terminal.#FULL.repeat(2);
+    const on = Terminal.FULL.repeat(2);
     const off = "  ";
     if (matrixes.length < 1) throw new Error("At least one matrix is required by the bitmap function");
     for (let matrix of matrixes) {
@@ -412,12 +412,12 @@ class Terminal extends EventEmitter {
   };
   #frozen = 0;
   #sprites = new Set();
-  static #FULL = "\u2588";
-  static #TOP = "\u2580";
-  static #BOTTOM = "\u2584";
-  static #LEFT = "\u258C";
-  static #RIGHT = "\u2590";
-  static #BORDERS = {
+  static FULL = "\u2588";
+  static TOP = "\u2580";
+  static BOTTOM = "\u2584";
+  static LEFT = "\u258C";
+  static RIGHT = "\u2590";
+  static BORDERS = {
     light: {
       vertical: "\u2502",
       horizontal: "\u2500",

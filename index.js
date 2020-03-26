@@ -36,7 +36,6 @@ const terminal = new Terminal({
   width: flags.w || flags.width || 110,
   height: flags.h || flags.height || 30,
   border: "solid",
-  dev: flags.d || flags.dev,
   color: {
     foreground: flags.c || flags.color || flags.fg || flags.foreground || "white",
     background: flags.bg || flags.background || flags.backgroundColor || "black"
@@ -50,16 +49,18 @@ const paddleWidth = 2;
 const paddleX = 7;
 const leftScoreX = Math.floor(terminal.width / 4 - 3);
 const rightScoreX = Math.ceil(3 * terminal.width / 4 - 3);
-const difficulty = flags.d || flags.difficulty;
+const letters = Terminal.bitmapPresets.letters;
+const borders = Terminal.BORDERS.double;
+borders.horizontalDown = "\u2566";
+borders.horizontalUp = "\u2569";
 let cpuScore = 0;
 let playerScore = 0;
 let ballDirection = Math.round(Math.random()) ? "left" : "right";
 let ballSlope, bouncedOff;
 
 const drawCenterLine = () => terminal.drawLine(centerX, 0, centerX, terminal.height, null, 2, true, 0.5);
-drawCenterLine();
 
-const leftPaddle = new Box(paddleWidth, paddleHeight, { speed: flags.cpuSpeed || (difficulty === 1 || difficulty === "easy" ? 10 : difficulty === 3 || difficulty === "hard" ? 20 : difficulty === 4 || difficulty === "imposable" ? 30 : 15) });
+const leftPaddle = new Box(paddleWidth, paddleHeight,);
 const rightPaddle = new Box(paddleWidth, paddleHeight, { speed: 30 });
 const ball = new Box(2, 1, { speed: 30 });
 
@@ -84,80 +85,120 @@ function reset () {
     bounce();
   }, 200);
 }
-
-terminal.on("up", () => {
-  rightPaddle.moveTo(rightPaddle.x, Math.max(rightPaddle.y - 1, 0));
-});
-terminal.on("down", () => {
-  rightPaddle.moveTo(rightPaddle.x, Math.min(rightPaddle.y + 1, terminal.height - rightPaddle.height));
-});
-
-function bounce () {
+function bounce() {
   ball.moveTo(...nextPoint(ballSlope, ballDirection));
 }
 
-ball.on("clear", (x, y) => {
-  if (x <= centerX && x >= centerX - 2) drawCenterLine();
-  else if (!(y + ball.height < 1 || y > 6)) {
-    if (!(x + ball.width < leftScoreX || x >= leftScoreX + 6)) writeScore(cpuScore, "left");
-    else if (!(x + ball.width < rightScoreX || x >= rightScoreX + 6)) writeScore(playerScore, "right");
-  }
-});
-ball.on("frame", () => {
-  const touching = ball.touching(rightPaddle) ? rightPaddle : ball.touching(leftPaddle) ? leftPaddle : null;
-  if (touching) {
-    touching.draw();
-    if (bouncedOff !== touching) {
-      ball.stop();
-      let x;
-      if (touching === rightPaddle) {
-        x = terminal.width - paddleX - 1;
-        ballDirection = "left";
+function init () {
+  terminal.clear();
+
+  terminal.on("up", () => {
+    rightPaddle.moveTo(rightPaddle.x, Math.max(rightPaddle.y - 1, 0));
+  });
+  terminal.on("down", () => {
+    rightPaddle.moveTo(rightPaddle.x, Math.min(rightPaddle.y + 1, terminal.height - rightPaddle.height));
+  });
+
+  ball.on("clear", (x, y) => {
+    if (x <= centerX && x >= centerX - 2) drawCenterLine();
+    else if (!(y + ball.height < 1 || y > 6)) {
+      if (!(x + ball.width < leftScoreX || x >= leftScoreX + 6)) writeScore(cpuScore, "left");
+      else if (!(x + ball.width < rightScoreX || x >= rightScoreX + 6)) writeScore(playerScore, "right");
+    }
+  });
+  ball.on("frame", () => {
+    const touching = ball.touching(rightPaddle) ? rightPaddle : ball.touching(leftPaddle) ? leftPaddle : null;
+    if (touching) {
+      touching.draw();
+      if (bouncedOff !== touching) {
+        ball.stop();
+        let x;
+        if (touching === rightPaddle) {
+          x = terminal.width - paddleX - 1;
+          ballDirection = "left";
+        }
+        else {
+          x = paddleX + 1;
+          ballDirection = "right";
+        }
+        ballSlope = ((rightPaddle.y + paddleHeight / 2) - (ball.y + 0.5)) / ((terminal.width - paddleX) - Math.min(ball.x + 1, x)) / 1.5 + (Math.random() - 0.5) / 5;
+        ball.speed += 10;
+        bouncedOff = touching;
+        bounce();
+      }
+    }
+  });
+  ball.on("moveEnded", () => {
+    const playerScored = ball.x === 0;
+    const cpuScored = ball.x === terminal.width - ball.width;
+    if (playerScored || cpuScored) {
+      let score;
+      if (playerScored) score = ++playerScore;
+      else if (cpuScored) score = ++cpuScore;
+      if (score === 10) {
+        let x = playerScored ? terminal.width / 2 - 29 : terminal.width / 2 - 33;
+        const y = terminal.height / 2 - 2.5;
+        terminal.removeAllListeners();
+        terminal.clear();
+        terminal.bitmap(x, y, letters.Y, letters.O, letters.U);
+        terminal.bitmap(x + 28, y, ...(playerScored ? [letters.W, letters.I, letters.N, Terminal.bitmapPresets.punctuation["!"]] : [letters.L, letters.O, letters.O, letters.S, letters.E]));
+        process.exit();
       }
       else {
-        x = paddleX + 1;
-        ballDirection = "right";
+        writeScore(score, ballDirection);
+        ballDirection = playerScored ? "left" : "right";
+        reset();
       }
-      ballSlope = ((rightPaddle.y + paddleHeight / 2) - (ball.y + 0.5)) / ((terminal.width - paddleX) - Math.min(ball.x + 1, x)) / 1.5 + (Math.random() - 0.5) / 5;
-      ball.speed += 10;
-      bouncedOff = touching;
+    }
+    else if (ball.y === 0 || ball.y === terminal.height - 1) {
+      ballSlope *= -1;
       bounce();
     }
-  }
-});
-ball.on("moveEnded", () => {
-  const playerScored = ball.x === 0;
-  const cpuScored = ball.x === terminal.width - ball.width;
-  if (playerScored || cpuScored) {
-    let score;
-    if (playerScored) score = ++playerScore;
-    else if (cpuScored) score = ++cpuScore;
-    if (score === 10) {
-      const letters = Terminal.bitmapPresets.letters;
-      let x = playerScored ? terminal.width / 2 - 29 : terminal.width / 2 - 33;
-      const y = terminal.height / 2 - 2.5;
-      terminal.removeAllListeners();
-      terminal.clear();
-      terminal.bitmap(x, y, letters.Y, letters.O, letters.U);
-      terminal.bitmap(x + 28, y, ...(playerScored ? [letters.W, letters.I, letters.N, Terminal.bitmapPresets.punctuation["!"]] : [letters.L, letters.O, letters.O, letters.S, letters.E]));
-      process.exit();
-    }
-    else {
-      writeScore(score, ballDirection);
-      ballDirection = playerScored ? "left" : "right";
-      reset();
-    }
-  }
-  else if (ball.y === 0 || ball.y === terminal.height - 1) {
-    ballSlope *= -1;
-    bounce();
-  }
-});
-/*leftPaddle.on("stop", () => {
-  throw new Error("Stopped");
-});*/
+  });
+  /*leftPaddle.on("stop", () => {
+    throw new Error("Stopped");
+  });*/
 
-writeScore(0, "left");
-writeScore(0, "right");
+  writeScore(0, "left");
+  writeScore(0, "right");
 
-reset();
+  reset();
+  drawCenterLine();
+}
+
+
+terminal.bitmap(terminal.width / 2 - 15, terminal.height / 3 - 2.5, letters.P, letters.O, letters.N, letters.G);
+terminal.write("\x1b[4mBy Liam Bloom\x1b[0m", terminal.width / 2 - 6.5, terminal.height / 3 + 3.5);
+terminal.color.refresh();
+terminal.write(borders.topLeft + 
+  borders.horizontal.repeat(8) + borders.horizontalDown + 
+  borders.horizontal.repeat(10) + borders.horizontalDown + 
+  borders.horizontal.repeat(8) + borders.horizontalDown + 
+  borders.horizontal.repeat(14) + borders.topRight, terminal.width / 2 - 22.5, 2 * terminal.height / 3 - 1.5);
+terminal.write(borders.vertical +
+  " 1:easy " + borders.vertical +
+  " 2:medium " + borders.vertical +
+  " 3:hard " + borders.vertical +
+  " 4:impossible " + borders.vertical, terminal.width / 2 - 22.5, 2 * terminal.height / 3 - 0.5);
+terminal.write(borders.bottomLeft +
+  borders.horizontal.repeat(8) + borders.horizontalUp +
+  borders.horizontal.repeat(10) + borders.horizontalUp +
+  borders.horizontal.repeat(8) + borders.horizontalUp +
+  borders.horizontal.repeat(14) + borders.bottomRight, terminal.width / 2 - 22.5, 2 * terminal.height / 3 + 0.5);
+
+terminal.on("1", () => {
+  leftPaddle.speed = 10;
+  init();
+});
+terminal.on("2", () => {
+  leftPaddle.speed = 15;
+  init();
+});
+terminal.on("3", () => {
+  leftPaddle.speed = 20;
+  init();
+});
+terminal.on("4", () => {
+  leftPaddle.speed = 30;
+  init();
+});
