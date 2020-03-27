@@ -81,8 +81,8 @@ class Terminal extends EventEmitter {
       out: {
         value: verify.config(config, "out", process.stdout)
       },
-      borderChars: {
-        value: Terminal.BORDERS[verify.config(config, "border", "light")] || (() => { throw new Error(`config.${config.border} is not a valid border type`); })()
+      borderStyle: {
+        value: verify.config(config, "border", "light")
       },
       // The following 2 could go in any set of property definitions
       in: {
@@ -95,6 +95,14 @@ class Terminal extends EventEmitter {
         value: verify.config(config, "dev", false)
       }
     });
+    Object.defineProperties(this, {  
+      color: {
+        value: new Color(this.out)
+      },
+      borderChars: {
+        value: Terminal.BORDERS[this.borderStyle] || (() => { throw new Error(`config.${config.border} is not a valid border type`); })()
+      }
+    });
     config.width = verify.config(config, "width", this.out.columns - 2 * this.largestBorder, false, -this.out.columns + 1, this.out.columns);
     config.height = verify.config(config, "height", this.out.rows - 2, false, -this.out.rows + 1, this.out.rows);
     Object.defineProperties(this, {
@@ -103,17 +111,8 @@ class Terminal extends EventEmitter {
       },
       height: {
         value: config.height < 0 ? this.out.rows - 2 + config.height : config.height
-      },
-      color: {
-        value: new Color(this.out)
-      }/*,
-      rl: {
-        value: readline.createInterface({
-          input: this.in,
-          output: this.out
-        })
-      }*/
-    })
+      }
+    });
     Object.defineProperty(this, "margin", {
       value: new Margin(this.out, this.width, this.height)
     });
@@ -121,32 +120,11 @@ class Terminal extends EventEmitter {
       if (config.color.foreground) this.color.foreground = config.color.foreground;
       if (config.color.background) this.color.background = config.color.background;
     }
-    /*this.#consoleBuffer = Buffer.alloc(this.width * this.height, " ");
-    const print = this.out.write.bind(this.out);
-    const to = this.out.cursorTo.bind(this.out);
-    this.out.cursorTo = function (x, y, callback) {
-      this.#consolePos.rows = x - this.margin.lr;
-      this.#consolePos.columns = y - this.margin.tb;
-      to(x, y, callback);
-      //console.log(JSON.stringify(this.#consolePos));
-    }.bind(this);
-    this.out.write = function (chunk, encoding, cb) {
-      //print(JSON.stringify(this.#consolePos) + " " + (this.#consolePos.columns > this.margin.lr) + " " + (this.#consolePos.columns + this.width < this.margin.lr)
-      //  + " " + (this.#consolePos.rows > this.margin.tb) + " " + (this.#consolePos.rows + this.height < this.margin.tb));
-      //process.exit();
-      if (this.#consolePos.columns >= 0 && this.#consolePos.columns <= this.width 
-        && this.#consolePos.rows >= 0 && this.#consolePos.rows <= this.height) {
-        //process.exit();
-        //print("\x1b[41m" + JSON.stringify(chunk) + " " + (this.#consolePos.rows + " " + this.width + " " + this.#consolePos.columns) + "\x1b[0m ");
-        const length = this.#consoleBuffer.write(chunk, this.#consolePos.rows * this.width + this.#consolePos.columns, undefined, encoding);
-        this.#consolePos.rows += Math.floor((this.#consolePos.columns + length) / this.width);
-        this.#consolePos.columns += length % this.width;
-        this.#consolePos.columns %= this.width;
-      }
-      print(chunk, encoding, cb);
-    }.bind(this);*/
-    //this.out.on("resize", () => this.#onresize());
-    //this.color.on("change", () => this.#refresh());
+    this.out.on("resize", () => {
+      this.#onresize()
+      this.emit("resize");
+    });
+    this.color.on("change", () => this.#refresh());
     this.#onresize();
     readline.emitKeypressEvents(process.stdin);
     this.in.setRawMode(true);
@@ -204,12 +182,6 @@ class Terminal extends EventEmitter {
             this.out.write(dash);
           }
         }
-        /*else if (roundToNearest(y1, 0.5) % 1) {
-          this.out.cursorTo(this.margin.lr + Math.round(xMin), this.margin.tb + Math.floor(y1) + row);
-          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.BOTTOM);
-          this.out.cursorTo(this.margin.lr + Math.round(xMin), this.margin.tb + Math.ceil(y1) + row);
-          for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.TOP);
-        }*/
         else {
           this.out.cursorTo(this.margin.lr + Math.round(xMin), this.margin.tb + Math.round(y1) + row);
           for (let column = 0; column < Math.abs(x2 - x1); column++) this.out.write(Terminal.FULL);
@@ -378,6 +350,9 @@ class Terminal extends EventEmitter {
   }
   #refresh = function () {
     this.#drawBorder();
+    for (let sprite of this.#sprites) {
+      if (sprite.showing) sprite.draw(sprite.x, sprite.y);
+    }
     /*for (let row = 0; row < this.height; row++) {
       this.out.cursorTo(this.margin.lr, this.margin.tb + row);
       this.out.write(this.#consoleBuffer.slice(row * this.width, (row + 1) * this.width - 1).toString("utf8"));
@@ -387,7 +362,7 @@ class Terminal extends EventEmitter {
     this.#clear(); 
     if (this.tooBig) {
       if (!this.#frozenStartTime) this.#frozenStartTime = performance.now();
-      this.out.write(`Playing field is larger than terminal. Please make terminal larger to continue. width${this.width} height:${this.height}`);
+      this.out.write(`Playing field is larger than terminal. Please make terminal larger to continue.`);
     }
     else {
       if (this.#frozenStartTime) {
@@ -449,7 +424,9 @@ class Terminal extends EventEmitter {
       topLeft: "\u250c",
       topRight: "\u2510",
       bottomLeft: "\u2514",
-      bottomRight: "\u2518"
+      bottomRight: "\u2518",
+      horizontalUp: "\u2534",
+      horizontalDown: "\u252c"
     },
     heavy: {
       vertical: "\u2503",
@@ -457,7 +434,9 @@ class Terminal extends EventEmitter {
       topLeft: "\u250f",
       topRight: "\u2513",
       bottomLeft: "\u2517",
-      bottomRight: "\u251b"
+      bottomRight: "\u251b",
+      horizontalUp: "\u253b",
+      horizontalDown: "\u2533"
     },
     double: {
       vertical: "\u2551",
@@ -465,7 +444,9 @@ class Terminal extends EventEmitter {
       topLeft: "\u2554",
       topRight: "\u2557",
       bottomLeft: "\u255a",
-      bottomRight: "\u255d"
+      bottomRight: "\u255d",
+      horizontalUp: "\u2569",
+      horizontalDown: "\u2566"
     },
     round: {
       vertical: "\u2502",
@@ -481,7 +462,9 @@ class Terminal extends EventEmitter {
       topLeft: "\u2588\u2588",
       topRight: "\u2588\u2588",
       bottomLeft: "\u2588\u2588",
-      bottomRight: "\u2588\u2588"
+      bottomRight: "\u2588\u2588",
+      horizontalUp: "\u2588\u2588",
+      horizontalDown: "\u2588\u2588"
     }
   }
   static sevenSegmentPresets = {
@@ -797,44 +780,6 @@ class Sprite extends EventEmitter {
   moveRelative (dx, dy, t) {
     this.moveTo(this.x + dx, this.y + dy, t);
   }
-  /*jump (height, distance, speed) {
-    //console.log("jump");
-    if (!this.#x) throw new Error("Cannot jump if shape is not showing");
-    height = verify(height, Number, "height");
-    distance = verify(distance, Number, "distance");
-    if (this.speed == null) speed = verify(speed, Number, "speed")
-    else speed = verify(speed, this.speed, "speed", false);
-    const x1 = this.x;
-    const x2 = this.x + distance;
-    const y1_2 = this.y;
-    const a = 4 * height / distance ** 2;
-    const h = distance / 2;
-    const k = -height + y1_2;
-    const quadratic = x => a * (x - h) ** 2 + k;
-    const time = distance / speed * 1000;
-    const start = this.terminal.time;
-    const frame = () => {
-      //console.log("frame");
-      const timeElapsed = this.terminal.time - start;
-      if (timeElapsed > time) {
-        cancelAnimationFrame(this.#frameId)
-        this.clear();
-        this.draw(x2, y1_2);
-      }
-      else {
-        //console.log(timeElapsed / speed + x1);
-        const x = this.xRounder(timeElapsed / speed + x1);
-        const y = this.yRounder(quadratic(timeElapsed / speed));
-        //console.log(`(${x1}, ${y1_2}) -> (${x}, ${y})`);
-        if (x !== this.x || y !== this.y) {
-          this.clear();
-          this.draw(x, y);
-        }
-        this.#frameId = requestAnimationFrame(frame);
-      }
-    };
-    this.#frameId = requestAnimationFrame(frame);
-  }*/
   get x () { return this.#x; }
   get y () { return this.#y; }
   get showing () {
@@ -879,7 +824,102 @@ class Box extends Sprite {
     return !(box.x > this.x + this.width || box.x + box.width < this.x || box.y > this.y + this.height || box.y + box.height < this.y);
   }
 }
+class Menu extends Sprite {
+  constructor (options, style) {
+    options = verify(options, Array, "options");
+    const numbers = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    super((x, y, color) => {
+      if (x < 0 || y < 0 || x + this.width >= this.terminal.width || y + this.height >= this.terminal.height) throw new RangeError("Menu cannot be outside terminal");
+      //if (color) this.terminal.out.write(Color.getForegroundColor(color));
+      this.#drawTop(color);
+      this.terminal.write(this.borderChars.vertical, x, y + 1, color);
+      let dx = this.borderChars.vertical.length;
+      for (let i in options) {
+        const option = ` ${numbers[i]}:${options[i].name} ${this.borderChars.vertical}`;
+        this.terminal.write(option, x + dx, y + 1, color);
+        dx += option.length;
+      }
+      this.#drawBottom(color);
+      if (!this.terminal.clearMode) {
+        for (let i in options) {
+          this.terminal.on(numbers[i], () => {
+            this.emit(numbers[i], i);
+          });
+          this.on(numbers[i], callback);
+        }
+      }
+      //if (color) this.terminal.color.refresh();
+    });
+    Object.defineProperties(this, {
+      options: {
+        value: options
+      },
+      style: {
+        get: function () { // this.terminal is not set at initialization, so I cannot use it
+          if (style == null) {
+            style = this.terminal.borderStyle
+            return style === "round" ? "light" : style;
+          }
+          else if (style === "round") throw new Error("Menus cannot have round borders");
+          else if (!Terminal.BORDERS.hasOwnProperty(style)) throw new Error(`${style} is not a valid border style`);
+          else return style;
+        }
+      },
+      borderChars: {
+        get: function () {
+          return Terminal.BORDERS[this.style];
+        }
+      },
+      width: {
+        get: function () {
+          return this.borderChars.vertical.length + options.map(e => e.name.length + 4 + this.borderChars.vertical.length).reduce((a, b) => a + b)
+        }
+      },
+      height: {
+        value: 3
+      }
+    });
+    const callback = i => {
+      for (let i in options) {
+        this.removeListener(numbers[i], callback);
+      }
+      options[i].callback(i);
+      this.clear();
+    }
+  }
+  #drawTop = function (color) {
+    this.#drawTopBottom({
+      left: this.borderChars.topLeft,
+      horizontal: this.borderChars.horizontal,
+      connect: this.borderChars.horizontalDown,
+      right: this.borderChars.topRight
+    }, color, 0)
+  }
+  #drawBottom = function (color) {
+    this.#drawTopBottom({
+      left: this.borderChars.bottomLeft,
+      horizontal: this.borderChars.horizontal,
+      connect: this.borderChars.horizontalUp,
+      right: this.borderChars.bottomRight
+    }, color, 2)
+  }
+  #drawTopBottom = function (borders, color, dy) {
+    this.terminal.write(borders.left, this.x, this.y + dy, color);
+    let dx = this.borderChars.vertical.length;
+    for (let i in this.options) {
+      const horizontals = borders.horizontal.repeat(this.options[i].name.length + 4);
+      this.terminal.write(horizontals, this.x + dx, this.y + dy, color);
+      dx += horizontals.length;
+      if (parseInt(i) === this.options.length - 1) {
+        this.terminal.write(borders.right, this.x + dx, this.y + dy, color);
+        dx += borders.right.length;
+      }
+      else {
+        this.terminal.write(borders.connect, this.x + dx, this.y + dy, color);
+        dx += borders.connect.length;
+      }
+    }
+  }
+}
 
-module.exports.Terminal = Terminal;
-module.exports.Sprite = Sprite;
-module.exports.Box = Box;
+module.exports = { Terminal, Sprite, Box, Menu };

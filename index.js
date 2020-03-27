@@ -7,7 +7,7 @@
 
 "use strict";
 const flags = require("./flags")();
-const { Terminal, Box } = require("./cmdDraw");
+const { Terminal, Box, Menu } = require("./cmdDraw");
 console = require("./colorConsole");
 
 const random = (min, max) => Math.random() * (max - min) + min;
@@ -171,7 +171,34 @@ function init () {
 terminal.writeLarge("PONG", terminal.width / 2 - 15, terminal.height / 3 - 2.5);
 terminal.write("\x1b[4mBy Liam Bloom\x1b[0m", terminal.width / 2 - 6.5, terminal.height / 3 + 3.5);
 terminal.color.refresh();
-terminal.write(borders.topLeft + 
+let startRan = false;
+function start (i) {
+  if (startRan) throw new Error("Start has already run");
+  startRan = true;
+  leftPaddle.speed = [10, 15, 20, 30][i];
+  init();
+}
+const difficultyMenu = new Menu([
+  {
+    name: "easy",
+    callback: start
+  },
+  {
+    name: "medium",
+    callback: start
+  },
+  {
+    name: "hard",
+    callback: start
+  },
+  {
+    name: "impossible",
+    callback: start
+  }
+], "double");
+terminal.addSprite(difficultyMenu);
+difficultyMenu.draw((terminal.width - difficultyMenu.width) / 2, 2 * terminal.height / 3 - difficultyMenu.height / 2);
+/*terminal.write(borders.topLeft + 
   borders.horizontal.repeat(8) + borders.horizontalDown + 
   borders.horizontal.repeat(10) + borders.horizontalDown + 
   borders.horizontal.repeat(8) + borders.horizontalDown + 
@@ -185,9 +212,9 @@ terminal.write(borders.bottomLeft +
   borders.horizontal.repeat(8) + borders.horizontalUp +
   borders.horizontal.repeat(10) + borders.horizontalUp +
   borders.horizontal.repeat(8) + borders.horizontalUp +
-  borders.horizontal.repeat(14) + borders.bottomRight, terminal.width / 2 - 22.5, 2 * terminal.height / 3 + 0.5);
+  borders.horizontal.repeat(14) + borders.bottomRight, terminal.width / 2 - 22.5, 2 * terminal.height / 3 + 0.5);*/
 
-terminal.on("1", () => {
+/*terminal.on("1", () => {
   leftPaddle.speed = 10;
   init();
 });
@@ -202,4 +229,4 @@ terminal.on("3", () => {
 terminal.on("4", () => {
   leftPaddle.speed = 30;
   init();
-});
+});*/
