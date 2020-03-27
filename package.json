@@ -1,11 +1,14 @@
 {
   "name": "command-line-pong",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "This is pong in the command line",
-  "main": "index.js",
+  "main": "./lib/pong.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node index.js"
+    "start": "node ./bin/index.js"
+  },
+  "bin": {
+    "pong": "./bin/index.js"
   },
   "engines": {
     "node": ">=12.0.0"
@@ -23,5 +26,6 @@
   },
   "author": "Liam Bloom (https://liambloom.herokuapp.com)",
   "license": "MIT",
-  "dependencies": {}
+  "dependencies": {},
+  "preferGlobal": true
 }
