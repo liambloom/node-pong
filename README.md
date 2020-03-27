@@ -18,7 +18,7 @@ Once installed, run ```pong``` in your command line, followed by any extra optio
 ### Options
 
 ```bash
-$ pong [option [value]] [option [value]] ...
+$ command-line-pong [option [value]] [option [value]] ...
 
 Options:
   -w, --width           Width of pong board             {default: 110}
