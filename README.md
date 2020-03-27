@@ -3,6 +3,7 @@ This is pong in the command line, written in NodeJS.
 
 ![](https://badgen.net/npm/v/command-line-pong)
 ![](https://badgen.net/badge/node/>=12.0.0/green)
+![](https://badgen.net/npm/dt/command-line-pong)
 ![](https://badgen.net/badge/licence/MIT)
 
 # Installation
@@ -41,7 +42,7 @@ Options:
 - ![#ffffff](https://placehold.it/15/ffffff?text=+) `white`
 
 # Troubleshooting
-
+Tips for how to fix various errors you may encounter while running this program
 ## 'pong' is not recognized 
 
 ```
@@ -59,7 +60,7 @@ Notice the **`-g`**, that is what makes the install global.
 
 ### Solution 2
 
-If it is installed globally, make sure that the 'npm' is in your PATH. For instructions on how to do that, see [*this* stackoverflow post](https://stackoverflow.com/questions/30710550/node-js-npm-modules-installed-but-command-not-recognized#36168581).
+If it is installed globally, make sure that the 'npm' is in your PATH. For instructions on how to do that, see [this stackoverflow post](https://stackoverflow.com/questions/30710550/node-js-npm-modules-installed-but-command-not-recognized#36168581).
 
 ## Undexpected '#'
 
