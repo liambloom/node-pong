@@ -1,6 +1,6 @@
 {
   "name": "command-line-pong",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "This is pong in the command line",
   "main": "./lib/pong.js",
   "scripts": {
